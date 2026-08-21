@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { RemoteHostDaemon } from '../lib/remote-host.mjs';
 import { MemoryStateStore, createInitialHostState } from '../lib/state-store.mjs';
-import { DshSessionControlPort, FakeSessionControlPort } from '../lib/session-control-port.mjs';
+import { DshSessionControlPort, FakeSessionControlPort, SessionControlPort } from '../lib/session-control-port.mjs';
 import { StageARuntimeManager } from '../lib/runtime-manager.mjs';
-import { createOperationEnvelope } from '../lib/protocol.mjs';
+import { createClientHello, createOperationEnvelope } from '../lib/protocol.mjs';
 
 const desired = { dshVersion: '0.1.0-rc.6', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' };
 
@@ -15,6 +15,7 @@ async function setup(options = {}) {
 test('remote host creates absolute path -> workspace -> session idempotently', async () => {
   const port = new FakeSessionControlPort();
   const daemon = await RemoteHostDaemon.create({ sessionControl: port });
+  await daemon.handle(createClientHello({ sourceHostId: 'local', sourceSessionId: 'controller' }));
   const make = (operationId) => createOperationEnvelope({ type: 'project.open', operationId, idempotencyKey: 'project-key', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: daemon.hostState.host.hostId, body: { absolutePath: '/srv/project', desiredState: desired } });
   const first = await daemon.handle(make('op-1'));
   const second = await daemon.handle(make('op-2'));
@@ -25,8 +26,13 @@ test('remote host creates absolute path -> workspace -> session idempotently', a
   assert.equal(port.calls.length, 1);
 });
 
+test('remote host refuses to start without a ready official Session Control port', async () => {
+  await assert.rejects(() => RemoteHostDaemon.create({ sessionControl: new SessionControlPort() }), (error) => error.code === 'SESSION_CONTROL_REQUIRED');
+});
+
 test('Stage A does not install external runtimes and marks the project needs attention', async () => {
   const daemon = await setup();
+  await daemon.handle(createClientHello({ sourceHostId: 'local', sourceSessionId: 'controller' }));
   const request = createOperationEnvelope({ type: 'project.open', idempotencyKey: 'needs-runtime', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: daemon.hostState.host.hostId, body: { absolutePath: '/srv/project', desiredState: { ...desired, runtimes: [{ id: 'codex', version: '1.0.0' }] } } });
   const response = await daemon.handle(request);
   assert.equal(response.operation.state, 'needs-attention');
@@ -44,6 +50,22 @@ test('host restart converts in-flight operations to needs-attention', async () =
   const daemon = await RemoteHostDaemon.create({ store, sessionControl: new FakeSessionControlPort() });
   assert.equal(daemon.hostState.operations['op-running'].state, 'needs-attention');
   assert.equal(daemon.hostState.operations['op-running'].error.code, 'HOST_RESTART_INTERRUPTED');
+});
+
+test('operation and reconcile reads are bound to the handshaked source and target', async () => {
+  const daemon = await setup();
+  const hostId = daemon.hostState.host.hostId;
+  await daemon.handle(createClientHello({ sourceHostId: 'source-a', sourceSessionId: 'controller-a' }));
+  await daemon.handle(createClientHello({ sourceHostId: 'source-b', sourceSessionId: 'controller-b' }));
+  const request = createOperationEnvelope({ type: 'project.open', idempotencyKey: 'source-a-project', sourceHostId: 'source-a', sourceSessionId: 'controller-a', targetHostId: hostId, body: { absolutePath: '/srv/project', desiredState: desired } });
+  const operation = await daemon.handle(request);
+  const stolen = await daemon.handle({ type: 'operation.get', operationId: operation.operation.operationId, sourceHostId: 'source-b', sourceSessionId: 'controller-b', targetHostId: hostId });
+  assert.equal(stolen.error.code, 'OPERATION_NOT_FOUND');
+  const leaked = await daemon.handle({ type: 'state.reconcile', hostId, incarnationId: daemon.hostState.host.incarnationId, sourceHostId: 'source-b', sourceSessionId: 'controller-b', targetHostId: hostId, knownRevision: 0 });
+  assert.equal(leaked.operations.length, 0);
+  assert.equal(leaked.projects.length, 0);
+  const missingSource = await daemon.handle({ type: 'state.reconcile', hostId, incarnationId: daemon.hostState.host.incarnationId, targetHostId: hostId, knownRevision: 0 });
+  assert.equal(missingSource.error.code, 'PROTOCOL_ERROR');
 });
 
 test('official session-control adapter forwards workspace, permission and schedule semantics without owning storage', async () => {

@@ -31,7 +31,7 @@
     "check": "node scripts/check.mjs",
     "test": "node scripts/run-tests.mjs",
     "test:stage-a": "node scripts/run-tests.mjs",
-    "pack:check": "npm pack --dry-run"
+    "pack:check": "node scripts/pack-check.mjs"
   },
   "license": "MIT"
 }

@@ -24,16 +24,20 @@ DSH 远程项目阶段 A：本机 Remote Control Connector、Linux x86_64 Remote
 
 ## 安装与运行
 
-本机依赖 Node.js 22 或更高版本。Remote Host 正式目标是 Linux x86_64，启动前需要由部署层提供真实的 `dsh-session-control` port module：
+本机依赖 Node.js 22 或更高版本；`dsh-session-control` 的正式 socket bridge 依赖 Node.js 24。Remote Host 正式目标是 Linux x86_64，启动前必须先配置并探测远端 DSH Host 内的正式 `dsh-session-control` service/port：
 
 ```bash
 npm install
 node bin/dsh-remote-host.mjs bridge --stdio \
   --data-dir "$HOME/.dsh-remote/state" \
-  --session-control-module /absolute/path/to/session-control-port.mjs
+  --session-control-socket /run/user/1000/dsh-session-control.sock
 ```
 
-该 module 应导出 `createSessionControlPort()` 或默认的 `openProject()` port。它必须调用远端 DSH Host 内的正式 `dsh-session-control` 服务；不要在 module 中直接写 Session JSONL 或 SQLite。
+缺少 `--session-control-socket` 或 `--session-control-module`、socket probe 失败、或 port 未声明 `ready=true` 时，Remote Host 在启动前 fail closed，不宣称 `project.open` capability。若使用 module，它应导出 `createSessionControlPort()` 或默认的 `openProject()` port；它必须调用远端 DSH Host 内的正式 `dsh-session-control` 服务，不得直接写 Session JSONL 或 SQLite。正式 socket bridge 的配置见 `dsh-session-control` README。
+
+### 首次安装
+
+首装不依赖远端预装本包。部署层先用 `npm pack` 产生固定版本的 `.tgz`，在受信 catalog 中登记 artifact 的 `version/name/target/protocolVersion/size/sha256` 以及 installer 的 `installerSha256`，然后通过 `SshCommandTransport` 上传 installer 和 artifact。计划依次执行 `mkdir`、远端 `sha256sum` 校验 installer、`node dsh-remote-host-installer.mjs ... --atomic --no-root` 和清理；installer 将包放入 `versions/<version>/package`，再原子切换 `current`。`remoteRoot` 必须是远端绝对 POSIX 路径，不能使用会被远端 shell 误解释的 `~`。
 
 本机 Gateway 由 DSH 控制面独立启动：
 
@@ -41,7 +45,7 @@ node bin/dsh-remote-host.mjs bridge --stdio \
 node bin/dsh-model-gateway.mjs --port 0
 ```
 
-内置命令在没有 provider 注入时只提供健康检查，不读取环境变量、配置文件、API Key 或登录目录，也不会调用真实模型。生产 provider/model/credential 解析由本机 DSH Gateway adapter 注入。
+内置命令在没有 `--provider-module` 注入时只提供健康检查，不读取环境变量、配置文件、API Key 或登录目录，也不会调用真实模型。生产 provider/model/credential 解析由本机 DSH Gateway adapter 注入；adapter 通过进程内 token 使用路径服务 `/v1/models` 和 `/v1/generate`，token 只保留在进程内，持久状态仅保存 hash。测试使用 fake provider，绝不调用真实 provider。
 
 ## 开发与验证
 
@@ -51,7 +55,7 @@ npm run test:stage-a
 npm run pack:check
 ```
 
-测试使用 fake transport、fake session-control、临时文件和本地 HTTP provider，不启动真实远端主机、不调用付费模型、不读取或测试任何真实密钥。完整验收证据见 [`docs/stage-a-acceptance.md`](docs/stage-a-acceptance.md)。
+测试使用 fake transport、fake session-control、临时文件和本地 fake HTTP provider，不启动真实远端主机、不调用付费模型、不读取或测试任何真实密钥。完整验收证据见 [`docs/stage-a-acceptance.md`](docs/stage-a-acceptance.md)；该记录明确区分 fake/integration 代码验收与尚未授权的真实 Linux SSH 部署验收。
 
 ## 安全和恢复底线
 

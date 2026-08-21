@@ -1,4 +1,5 @@
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -6,10 +7,11 @@ import { once } from 'node:events';
 import { pathToFileURL } from 'node:url';
 
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const npmCli = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+const npmCli = process.env.npm_execpath || join(process.env.ProgramFiles || 'C:\\Program Files', 'nodejs', 'node_modules', 'npm', 'bin', 'npm-cli.js');
 let gatewayProcess = null;
 function runNpm(args) {
-  if (process.platform === 'win32') return spawnSync(process.execPath, [npmCli, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (process.platform === 'win32' && existsSync(npmCli)) return spawnSync(process.execPath, [npmCli, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (process.platform === 'win32') return spawnSync('npm.cmd', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   return spawnSync(npm, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 const root = await mkdtemp(join(tmpdir(), 'dsh-remote-pack-'));
@@ -23,9 +25,9 @@ try {
   if (install.status !== 0) throw new Error(`packed tgz install failed: ${install.stderr ?? install.error?.message ?? 'unknown error'}`);
   const packageRoot = join(consumer, 'node_modules', 'dsh-remote-control');
   const packageEntry = pathToFileURL(join(packageRoot, 'lib', 'index.mjs')).href;
-  const importCheck = spawnSync(process.execPath, ['-e', `const m=await import(${JSON.stringify(packageEntry)}); if(typeof m.RemoteControlConnector!=='function'||typeof m.RemoteHostDaemon!=='function'||typeof m.ModelGateway!=='function') process.exit(2)`], { encoding: 'utf8', stdio: 'pipe' });
+  const importCheck = spawnSync(process.execPath, ['-e', `const m=await import(${JSON.stringify(packageEntry)}); if(typeof m.RemoteControlConnector!=='function'||typeof m.RemoteHostDaemon!=='function'||typeof m.ModelGateway!=='function'||typeof m.DesiredStateSynchronizer!=='function'||typeof m.TrustedArtifactRegistry!=='function') process.exit(2)`], { encoding: 'utf8', stdio: 'pipe' });
   if (importCheck.status !== 0) throw new Error(`packed import smoke failed: ${importCheck.stderr}`);
-  for (const file of ['dsh-remote-host.mjs', 'dsh-remote-host-installer.mjs', 'dsh-model-gateway.mjs']) {
+  for (const file of ['dsh-remote-host.mjs', 'dsh-remote-host-installer.mjs', 'dsh-remote-artifact-installer.mjs', 'dsh-model-gateway.mjs']) {
     const check = spawnSync(process.execPath, ['--check', join(packageRoot, 'bin', file)], { encoding: 'utf8', stdio: 'pipe' });
     if (check.status !== 0) throw new Error(`packed bin smoke failed for ${file}: ${check.stderr}`);
   }
@@ -48,7 +50,7 @@ try {
   gateway.kill();
   await once(gateway, 'exit');
   gatewayProcess = null;
-  console.log(JSON.stringify({ status: 'passed', tarball: tgz, imported: true, binsChecked: 3 }));
+  console.log(JSON.stringify({ status: 'passed', tarball: tgz, imported: true, binsChecked: 4 }));
 } finally {
   if (gatewayProcess && !gatewayProcess.killed) gatewayProcess.kill();
   await rm(root, { recursive: true, force: true });

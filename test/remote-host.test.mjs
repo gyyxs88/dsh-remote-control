@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { RemoteHostDaemon } from '../lib/remote-host.mjs';
 import { MemoryStateStore, createInitialHostState } from '../lib/state-store.mjs';
 import { DshSessionControlPort, FakeSessionControlPort, SessionControlPort } from '../lib/session-control-port.mjs';
+import { FakeTransport, RemoteControlConnector } from '../lib/connector.mjs';
 import { StageARuntimeManager } from '../lib/runtime-manager.mjs';
-import { createClientHello, createOperationEnvelope } from '../lib/protocol.mjs';
+import { createClientHello, createOperationEnvelope, sha256 } from '../lib/protocol.mjs';
+import { validateDesiredState } from '../lib/desired-state.mjs';
 
 const desired = { dshVersion: '0.1.0-rc.6', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' };
 
@@ -24,6 +26,34 @@ test('remote host creates absolute path -> workspace -> session idempotently', a
   assert.equal(second.operation.result.workspaceId, 'workspace-1');
   assert.equal(second.operation.result.sessionId, 'session-1');
   assert.equal(port.calls.length, 1);
+});
+
+test('project.open persists verified plugin sync status and reconcile returns it without owning Session storage', async () => {
+  const daemon = await setup();
+  const hostId = daemon.hostState.host.hostId;
+  await daemon.handle(createClientHello({ sourceHostId: 'local', sourceSessionId: 'controller' }));
+  const desiredWithPlugin = {
+    ...desired,
+    plugins: [{ id: 'remote-plugin', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'remote-plugin.tgz' }, sha256: 'a'.repeat(64), compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.6' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:remote'] }],
+  };
+  const normalized = validateDesiredState(desiredWithPlugin);
+  const request = createOperationEnvelope({ type: 'project.open', operationId: 'plugin-open-001', idempotencyKey: 'plugin-open-key', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: hostId, body: { absolutePath: '/srv/plugin-project', desiredState: desiredWithPlugin, pluginSync: { status: 'completed', desiredStateSha256: sha256(normalized), items: [{ key: 'plugin:remote-plugin@1.0.0', status: 'installed', version: '1.0.0', sha256: 'a'.repeat(64) }] } } });
+  const opened = await daemon.handle(request);
+  assert.equal(opened.operation.state, 'completed');
+  assert.equal(opened.operation.result.pluginSync.status, 'completed');
+  const reconciled = await daemon.handle({ type: 'state.reconcile', hostId, incarnationId: daemon.hostState.host.incarnationId, sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: hostId, knownRevision: 0 });
+  assert.equal(reconciled.projects[0].pluginSync.status, 'completed');
+  assert.equal(daemon.hostState.projects[reconciled.projects[0].projectId].workspaceId, 'workspace-1');
+});
+
+test('project.open refuses remote requirements without a verified synchronizer receipt', async () => {
+  const daemon = await setup();
+  const connector = new RemoteControlConnector({ transport: new FakeTransport(daemon), sourceHostId: 'local', sourceSessionId: 'controller' });
+  await connector.connect();
+  const response = await connector.openProject({ absolutePath: '/srv/un-synced', desiredState: { ...desired, plugins: [{ id: 'remote-plugin', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'remote-plugin.tgz' }, sha256: 'a'.repeat(64), compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.6' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:remote'] }] } });
+  assert.equal(response.state, 'needs-attention');
+  assert.equal(response.error.code, 'PLUGIN_SYNC_NEEDS_ATTENTION');
+  assert.equal(daemon.hostState.projects && Object.keys(daemon.hostState.projects).length, 0);
 });
 
 test('remote host refuses to start without a ready official Session Control port', async () => {

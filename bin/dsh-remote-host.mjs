@@ -2,6 +2,7 @@
 import { pathToFileURL } from 'node:url';
 import { homedir } from 'node:os';
 import { RemoteHostDaemon } from '../lib/remote-host.mjs';
+import { InstalledRuntimeManager } from '../lib/runtime-manager.mjs';
 import { UnixSocketSessionControlPort } from '../lib/session-control-port.mjs';
 import { MAX_FRAME_BYTES } from '../lib/protocol.mjs';
 
@@ -38,7 +39,8 @@ async function main() {
   }
   const dataDir = options['data-dir'] || `${homedir()}/.dsh-remote/state`;
   const sessionControl = await loadSessionControl(options['session-control-module'], options['session-control-socket'], options['host-id'] || 'remote-host');
-  const daemon = await RemoteHostDaemon.create({ dataDir, sessionControl, allowedRoot: options['allowed-root'] || null, hostId: options['host-id'] || undefined });
+  const runtimeRoot = options['runtime-root'] || `${homedir()}/.dsh-remote`;
+  const daemon = await RemoteHostDaemon.create({ dataDir, sessionControl, runtimeManager: new InstalledRuntimeManager({ installRoot: runtimeRoot }), allowedRoot: options['allowed-root'] || null, hostId: options['host-id'] || undefined });
   process.on('SIGTERM', () => void daemon.close().then(() => process.exit(0)));
   process.on('SIGINT', () => void daemon.close().then(() => process.exit(0)));
   if (options.bridge === true || options.stdio === true) return runBridge(daemon);

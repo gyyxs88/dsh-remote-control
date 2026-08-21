@@ -1,7 +1,7 @@
 {
   "name": "dsh-remote-control",
   "version": "0.1.0",
-  "description": "DSH Stage B local connector, Linux Remote Host, Desired State sync and Model Gateway bridge",
+  "description": "DSH remote project control, trusted Desired State/runtime sync and Model Gateway bridge",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -23,7 +23,8 @@
     "./desired-state": "./lib/desired-state.mjs",
     "./desired-state-registry": "./lib/desired-state-registry.mjs",
     "./plugin-sync": "./lib/plugin-sync.mjs",
-    "./remote-artifact-installer": "./lib/remote-artifact-installer.mjs"
+    "./remote-artifact-installer": "./lib/remote-artifact-installer.mjs",
+    "./runtime-manager": "./lib/runtime-manager.mjs"
   },
   "files": [
     "bin",
@@ -37,6 +38,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:stage-a": "node scripts/run-tests.mjs",
     "test:stage-b": "node scripts/run-tests.mjs",
+    "test:stage-c": "node scripts/run-tests.mjs",
     "pack:check": "node scripts/pack-check.mjs"
   },
   "license": "MIT"

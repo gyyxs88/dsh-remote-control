@@ -40,6 +40,7 @@ async function main() {
         packageName: required('target-package-name'),
         target: option('target') ?? 'linux-x86_64',
         protocolVersion: option('protocol-version') ?? '1.0',
+        ...(kind === 'runtime' ? { executablePath: required('target-executable-path') } : {}),
       };
     process.stdout.write(`${JSON.stringify(await rollbackRemoteArtifact({ kind, id, installRoot, target }))}\n`);
     return;
@@ -52,6 +53,7 @@ async function main() {
     expectedSha256: required('sha256'),
     installRoot,
     packageName: required('package-name'),
+    ...(kind === 'runtime' ? { executablePath: required('executable-path') } : {}),
     protocolVersion: option('protocol-version') ?? '1.0',
     target: option('target') ?? 'linux-x86_64',
   });

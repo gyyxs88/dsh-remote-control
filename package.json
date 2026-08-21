@@ -1,7 +1,7 @@
 {
   "name": "dsh-remote-control",
   "version": "0.1.0",
-  "description": "DSH Stage A local connector, Linux Remote Host and Model Gateway bridge",
+  "description": "DSH Stage B local connector, Linux Remote Host, Desired State sync and Model Gateway bridge",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -9,7 +9,8 @@
   "bin": {
     "dsh-remote-host": "bin/dsh-remote-host.mjs",
     "dsh-model-gateway": "bin/dsh-model-gateway.mjs",
-    "dsh-remote-host-installer": "bin/dsh-remote-host-installer.mjs"
+    "dsh-remote-host-installer": "bin/dsh-remote-host-installer.mjs",
+    "dsh-remote-artifact-installer": "bin/dsh-remote-artifact-installer.mjs"
   },
   "exports": {
     ".": "./lib/index.mjs",
@@ -18,7 +19,11 @@
     "./remote-host": "./lib/remote-host.mjs",
     "./gateway": "./lib/gateway.mjs",
     "./ssh": "./lib/ssh.mjs",
-    "./bootstrap": "./lib/bootstrap.mjs"
+    "./bootstrap": "./lib/bootstrap.mjs",
+    "./desired-state": "./lib/desired-state.mjs",
+    "./desired-state-registry": "./lib/desired-state-registry.mjs",
+    "./plugin-sync": "./lib/plugin-sync.mjs",
+    "./remote-artifact-installer": "./lib/remote-artifact-installer.mjs"
   },
   "files": [
     "bin",
@@ -31,6 +36,7 @@
     "check": "node scripts/check.mjs",
     "test": "node scripts/run-tests.mjs",
     "test:stage-a": "node scripts/run-tests.mjs",
+    "test:stage-b": "node scripts/run-tests.mjs",
     "pack:check": "node scripts/pack-check.mjs"
   },
   "license": "MIT"

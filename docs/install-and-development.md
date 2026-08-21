@@ -7,6 +7,7 @@ cd D:\Project\deepseek-harness-lab\dsh-remote-control
 npm install
 npm run check
 npm run test:stage-a
+npm run test:stage-b
 npm run pack:check
 ```
 
@@ -20,6 +21,11 @@ npm run pack:check
 4. 远端通过 stdio bridge 启动 `dsh-remote-host`，Host Agent 只保存自己的 Host/Project/Operation 摘要。
 5. `SessionControlPort` 由远端 DSH Host 组装，连接该 Host 内的 `dsh-session-control` 正式服务；正式部署优先使用其 Unix socket bridge。远程仓库不能直接打开目标 Session 的 JSONL/SQLite，缺 port 时 daemon 启动即失败。
 6. 本机 Model Gateway 监听 loopback，Connector 为远端 Host 建立短期 token 和 SSH reverse tunnel。断开 Gateway 时，原生 Agent 新轮次应等待 Gateway，而不是重新投递。
+
+7. 项目 Desired State 由本机 `TrustedArtifactRegistry` 解析。registry entry 必须预先登记 artifact 文件名、版本、大小、SHA-256、package identity 和兼容范围；项目值不能自证可信，也不能提供安装脚本。`remote`/`both` 插件与独立项目 Skill 通过 `DesiredStateSynchronizer` 上传到 staging，再调用已安装版本的 `current/bin/dsh-remote-artifact-installer.mjs`。
+8. 远端插件布局为 `<remoteRoot>/plugins/<id>/versions/<version>`，Skill 布局为 `<remoteRoot>/skills/<id>/versions/<version>`；只有 manifest、package identity、归档树和探测全部通过才原子切换 `current`。旧版本永不因升级删除，正在使用的版本不会被改写。
+9. 插件自带 Skill 必须由 plugin `dsh.remote.bundledSkills` manifest 按版本和摘要绑定；项目 Skill 没有 `bundledWith` 时独立传输。凭据、Session JSONL/SQLite、operation 状态、日志、缓存、本机插件状态均不在同步范围内。
+10. 同步清理响应丢失时，只用稳定 `--status` 入口按 operation 对账；staging 已不存在也可确认 `completed`。若仍不能证明终态，返回 `persistence-unknown`，`project.open` 不创建 Session。
 
 ## SessionControlPort module
 

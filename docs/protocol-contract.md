@@ -1,4 +1,4 @@
-# 阶段 A 协议契约
+# 阶段 A/B 协议契约
 
 协议名称为 `dsh-remote-control`，当前版本 `1.0`。兼容规则是同一 major 才能握手，minor 取双方较小值；major 不同直接拒绝。所有 JSON frame 都是一条独立消息，stdio bridge 外层可带 `{ "id": string, "message": object }`。
 
@@ -42,11 +42,36 @@ Remote Host 返回 `host.hello.response`，包括 `hostId`、同一 incarnation 
 
 Remote Host 以 `idempotencyKey + bodySha256 + type` 查找既有 operation。相同请求返回原 operation，不再次调用 Session Control；同一幂等键绑定不同正文直接拒绝。
 
-operation 状态为：`pending`、`running`、`completed`、`partial`、`failed`、`needs-attention`。只有 `completed`/`partial`/`failed`/`needs-attention` 是 durable terminal state。断线、进程重启或传输层错误无法证明终态时只能进入 `needs-attention`。
+operation 状态为：`pending`、`running`、`completed`、`partial`、`failed`、`needs-attention`。只有 `completed`/`partial`/`failed`/`needs-attention` 是 durable terminal state。插件同步的细分状态位于 `project.pluginSync.status`，允许 `completed`、`partial`、`incompatible`、`needs-attention`、`persistence-unknown`；这些状态不能被压缩成成功或静默 fallback。断线、进程重启或传输层错误无法证明终态时只能进入 `needs-attention`，并保留 `persistence-unknown` 细分原因。
+
+## Desired State 与可信 registry
+
+`desiredState` 的插件和 Skill 项必须是以下版本化结构；没有摘要或没有 `TrustedArtifactRegistry` 精确 allowlist 项时拒绝：
+
+```json
+{
+  "id": "dsh-session-control",
+  "version": "0.6.0",
+  "placement": "remote",
+  "source": { "registry": "dsh-public", "artifact": "dsh-session-control-0.6.0.tgz" },
+  "sha256": "64 个小写十六进制字符",
+  "compatibility": {
+    "dsh": { "min": "0.1.0-rc.6", "max": "0.1.0-rc.6" },
+    "api": { "min": "1.0", "max": "1.0" }
+  },
+  "requiredBy": ["project:default"]
+}
+```
+
+`placement` 只能是 `control`、`remote` 或 `both`。同步器只解析 `remote`/`both`；control-only 项不上传。Skill 的 `bundledWith` 必须指向同版本插件，并由插件 remote manifest 的 Skill 摘要覆盖；没有 `bundledWith` 的项目 Skill 单独安装。`source` 只是受信 registry 身份，不是允许项目提交并执行的 URL、Shell 或 npm 安装脚本。
+
+registry 对本机固定文件做 regular-file、大小、SHA-256、tar entry、package identity、DSH/API manifest 和 lifecycle script 校验。远端安装入口固定为已部署版本中的 `dsh-remote-artifact-installer.mjs`，只在临时目录解包、探测后原子切换 `current`，旧的已验证版本和正在使用的版本不删除。
 
 ## Project Open
 
-`body.absolutePath` 必须是远端 Linux 的 POSIX 绝对路径，禁止 traversal；`desiredState` 至少包含 DSH 版本、插件/Skill/Runtime 数组、初始权限和 `local-gateway-required` 或 `remote-autonomous` 路由。
+`body.absolutePath` 必须是远端 Linux 的 POSIX 绝对路径，禁止 traversal；`desiredState` 至少包含 DSH/API 版本、插件/Skill/Runtime 数组、初始权限和 `local-gateway-required` 或 `remote-autonomous` 路由。
+
+有 remote/both requirement 时，`body.pluginSync` 必须包含 `desiredStateSha256`、每项的 verified result 和 `status: completed`。缺少同步器、allowlist 拒绝、兼容性错误、部分成功或终态未知都会创建 `needs-attention` operation，不调用 Session Control；Connector 的 `project.open` response 与后续 `state.reconcile` 会返回该同步状态。成功回执只能覆盖每个远端 requirement，不能伪造 control-only 项的安装。
 
 Remote Host 先检查 allowed root 和 Runtime Manager，再通过 `SessionControlPort.openProject()` 调用目标 Host 的正式 `dsh-session-control` 服务。该 port 负责按既有语义创建/复用目录、Workspace、Session、权限和 Schedule；返回的 `workspaceId`/`sessionId` 才能写入本仓库的 Project 摘要。Partial 成功原样保留，不删除用户目录、Git 数据或已经创建的会话。
 

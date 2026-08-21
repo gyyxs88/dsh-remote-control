@@ -40,4 +40,4 @@ npm run pack:check
 
 ## 后续边界
 
-阶段 B 才加入插件/Skill Desired State 的固定产物同步与回滚；阶段 C 才加入第三方 Agent 运行时驱动和认证引导。任何真实 provider 或秘密测试都不属于本次验收。
+本记录只覆盖阶段 A，不覆盖已经单独记录的阶段 B 插件/Skill Desired State 固定产物同步与回滚（见 [`stage-b-acceptance.md`](stage-b-acceptance.md)）；阶段 C 才加入第三方 Agent 运行时驱动和认证引导。任何真实 provider 或秘密测试都不属于本次验收。

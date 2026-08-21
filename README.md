@@ -1,6 +1,6 @@
 # dsh-remote-control
 
-DSH 远程项目阶段 A：本机 Remote Control Connector、Linux x86_64 Remote Host stdio bridge、受信 bootstrap 基础、远端 operation/revision 对账，以及独立本机 Model Gateway 的 SSH 反向隧道接线。
+DSH 远程项目阶段 A/B：本机 Remote Control Connector、Linux x86_64 Remote Host stdio bridge、受信 bootstrap、版本化插件/Skill Desired State 同步、远端 operation/revision 对账，以及独立本机 Model Gateway 的 SSH 反向隧道接线。
 
 本仓库是公开的跨主机控制面仓库：<https://github.com/gyyxs88/dsh-remote-control>。
 
@@ -21,6 +21,15 @@ DSH 远程项目阶段 A：本机 Remote Control Connector、Linux x86_64 Remote
 - 独立 `ModelGateway` 进程边界：只绑定 `127.0.0.1`，按 Host 签发短期 token，模型名必须在本机 provider 目录中，绝不向远端发送底层密钥。
 - SSH stdio bridge 和 SSH reverse tunnel 的严格 Host Key 参数构造；要求固定 `known_hosts` 和指纹/公钥 pin，禁止自动接受未知 key、`curl | sh` 和公网 reverse bind。
 - Stage A Runtime Manager 只有接口和显式 `missing`/`needs-attention` 结果，不安装 Codex、Claude Code、Grok Build 或 ACP。
+
+## 阶段 B 已交付
+
+- `PluginRequirement` / `SkillRequirement` 使用版本化 Desired State，固定 `placement`、版本、受信来源、SHA-256、DSH/API 兼容范围和 `requiredBy`。
+- `TrustedArtifactRegistry` 是唯一产物入口；未知插件、缺摘要、版本/API 不兼容、manifest 不匹配和生命周期安装脚本均 fail closed。项目插件不能提交任意远端安装命令。
+- 同步器只选 `remote`/`both`，对真实 `.tgz` 做文件、归档、package manifest 和 SHA-256 校验；远端使用临时目录、探测、版本保留和 `current` 原子切换，已验证旧版本不被删除。
+- 插件自带 Skill 由插件 manifest 绑定版本；项目 Skill 仍以独立 Desired State 项同步。凭据、Session JSONL/SQLite、operation 状态、日志、缓存和本机插件状态不进入同步。
+- `project.open` 必须携带与 Desired State 绑定的已完成同步回执；`partial`、`incompatible`、`needs-attention` 和 `persistence-unknown` 不会静默创建 Session，并在 project/reconcile 摘要中保留。
+- `dsh-session-control` 包含正式的 `dsh.remote` manifest 与 socket `ping` 返回的机读 capability/version 元数据，继续只负责单 Host 的 Workspace、Session、权限、审批和 Schedule。
 
 ## 安装与运行
 
@@ -47,6 +56,12 @@ SSH `expectedFingerprint` 使用 OpenSSH `ssh-keygen -lf` 兼容的 `SHA256:<Bas
 node bin/dsh-model-gateway.mjs --port 0
 ```
 
+### 项目插件与 Skill 同步
+
+控制面先从管理员维护的 `TrustedArtifactRegistry` 解析项目 Desired State，再通过同一受信 SSH/SFTP transport 上传产物。远端稳定入口为已安装版本中的 `current/bin/dsh-remote-artifact-installer.mjs`：它只接受固定的 kind/id/version/package/sha256，拒绝 root、路径逃逸、危险归档条目和 lifecycle script，不执行 `npm install` 或项目自带安装命令。
+
+每个插件或项目 Skill 安装到 `<remoteRoot>/{plugins,skills}/<id>/versions/<version>/package`，只通过校验后的 `current` 指针启用。响应丢失时同步器只调用稳定的 `--status` 入口对账，不依赖 staging；不能证明终态就返回 `persistence-unknown`。未配置同步器时，只要 Desired State 有远端 requirement，`project.open` 会明确进入 `needs-attention`。
+
 内置命令在没有 `--provider-module` 注入时只提供健康检查，不读取环境变量、配置文件、API Key 或登录目录，也不会调用真实模型。生产 provider/model/credential 解析由本机 DSH Gateway adapter 注入；adapter 通过进程内 token 使用路径服务 `/v1/models` 和 `/v1/generate`，token 只保留在进程内，持久状态仅保存 hash。测试使用 fake provider，绝不调用真实 provider。
 
 ## 开发与验证
@@ -54,10 +69,11 @@ node bin/dsh-model-gateway.mjs --port 0
 ```powershell
 npm run check
 npm run test:stage-a
+npm run test:stage-b
 npm run pack:check
 ```
 
-测试使用 fake transport、fake session-control、临时文件和本地 fake HTTP provider，不启动真实远端主机、不调用付费模型、不读取或测试任何真实密钥。完整验收证据见 [`docs/stage-a-acceptance.md`](docs/stage-a-acceptance.md)；该记录明确区分 fake/integration 代码验收与尚未授权的真实 Linux SSH 部署验收。
+测试使用 fake transport、fake session-control、临时文件、真实 `.tgz` 归档和本地 fake HTTP provider，不启动真实远端主机、不调用付费模型、不读取或测试任何真实密钥。阶段 A 证据见 [`docs/stage-a-acceptance.md`](docs/stage-a-acceptance.md)，阶段 B 证据见 [`docs/stage-b-acceptance.md`](docs/stage-b-acceptance.md)；两份记录都明确区分 fake/integration 代码验收与尚未授权的真实 Linux SSH 部署验收。
 
 ## 安全和恢复底线
 
@@ -71,7 +87,7 @@ npm run pack:check
 
 ## 后续阶段
 
-插件/Skill Desired State、固定版本同步和原子回滚属于阶段 B；Codex/Claude/Grok/ACP 受信驱动与认证引导属于阶段 C；更完整的长任务恢复、诊断和实机平台扩展属于阶段 D。本仓库不会为了阶段 A 预装这些外部 Agent。
+Codex/Claude/Grok/ACP 受信驱动与认证引导属于阶段 C；更完整的长任务恢复、诊断和实机平台扩展属于阶段 D。本仓库不会为了阶段 A/B 预装这些外部 Agent。
 
 ## License
 

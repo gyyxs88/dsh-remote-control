@@ -1,0 +1,49 @@
+#!/usr/bin/env node
+import { installRemoteArtifact, inspectRemoteArtifact } from '../lib/remote-artifact-installer.mjs';
+import { validateSafePosixPath } from '../lib/path-safety.mjs';
+
+function option(name) {
+  const index = process.argv.indexOf(`--${name}`);
+  return index >= 0 ? process.argv[index + 1] : null;
+}
+
+function required(name) {
+  const value = option(name);
+  if (!value || value.startsWith('--')) throw new Error(`--${name} is required`);
+  return value;
+}
+
+function assertNonRootRuntime() {
+  if (process.platform !== 'linux' || process.arch !== 'x64') throw new Error('remote artifact installer only supports Linux x86_64');
+  if (typeof process.getuid === 'function' && process.getuid() === 0) throw new Error('remote artifact installer refuses to run as root');
+}
+
+async function main() {
+  assertNonRootRuntime();
+  const kind = required('kind');
+  const id = required('id');
+  const installRoot = required('install-root');
+  validateSafePosixPath(installRoot, { field: 'plugin install root', allowHome: false });
+  if (process.argv.includes('--status') || process.argv.includes('--probe')) {
+    process.stdout.write(`${JSON.stringify(await inspectRemoteArtifact({ kind, id, installRoot }))}\n`);
+    return;
+  }
+  if (!process.argv.includes('--atomic') || !process.argv.includes('--no-scripts')) throw new Error('remote artifact installer requires --atomic and --no-scripts');
+  const result = await installRemoteArtifact({
+    artifactPath: required('artifact'),
+    kind,
+    id,
+    version: required('version'),
+    expectedSha256: required('sha256'),
+    installRoot,
+    packageName: required('package-name'),
+    protocolVersion: option('protocol-version') ?? '1.0',
+    target: option('target') ?? 'linux-x86_64',
+  });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}
+
+main().catch((error) => {
+  process.stderr.write(`${error.stack ?? error}\n`);
+  process.exitCode = 1;
+});

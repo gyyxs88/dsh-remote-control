@@ -33,11 +33,11 @@ DSH 远程项目阶段 A/B/C：本机 Remote Control Connector、Linux x86_64 Re
 
 ## 阶段 C 已交付
 
-- `RuntimeRequirement` 固定 runtime id/version/target/size/SHA-256/source/package/executable/protocol、DSH/API 兼容范围和 `requiredBy`；支持 `codex`、`claude-code`、`grok-build`、`acp/<name>` 的独立 driver/capability/auth policy。
+- 渠道包的 `dsh.remote.channelRuntime` 只声明稳定 runtime id、driver、protocol/capability 和 DSH/API 兼容范围；管理员 `channelPins` 再从可含多版本的受信 catalog 解析 exact `RuntimeRequirement`（version/source/size/SHA-256/package/executable/`requiredBy`）。安装包自身的身份仍只由 `dsh.runtime` manifest 校验，不能把渠道包版本冒充供应商 runtime 版本。
 - Runtime Manager 复用 Stage B 的受信 catalog、非 root、临时目录、探测、原子 `current`、旧版保留/rollback 和 stable status reconcile；只安装项目实际需要的 runtime，不从 PATH 猜测，也不接受项目任意安装脚本。
 - Runtime 状态统一为 `not-required`、`missing`、`installing`、`auth-required`、`ready`、`installed-auth-unverified`、`update-required`、`incompatible`、`degraded`。没有可靠且不计费的认证探测时只报告 `installed-auth-unverified`，不伪造 `ready`。
-- 认证 challenge/status 只返回脱敏状态、公开 URL 和设备码；Codex、Claude Code、Grok headless/API、ACP driver-defined 认证都留在远端用户边界，不复制或持久化 `~/.codex`、`~/.claude`、`~/.grok`、Cookie、OAuth token 或 API key。
-- `dsh-subagent-code-agents` 每个渠道 manifest 暴露 `dsh.remote.runtime`，启动从 Runtime Manager 获取绝对 executable。`ChannelExecutionPolicy` 继承目标 Session 三档权限：只有 Full Access 可用 bypass/always-approve/sandbox-off；Workspace Write 保留目标子会话审批，渠道无法兑现的组合启动前结构化拒绝。
+- 认证由远端受信 driver 以固定 `codex login`、`claude auth login`、`grok login --device-auth` argv 启动受管进程；一旦流式输出公开 URL/设备码就立即返回 `challengeId`，进程继续由 Remote Host 托管，`runtime.auth.status`/`runtime.auth.cancel` 可查询、取消、对账或在 daemon 关闭时清理。只返回脱敏状态、公开 URL 和设备码，不返回完整 stdout；首次调用前仍必须经过 Remote Host 生成 nonce、正式 Session Control 确认和来源绑定的 reservation。reservation 只持久化公开 runtime identity、source、operation、body hash、nonce/期限和状态；Session Control 响应丢失或 daemon 重启时，只允许原 operation/idempotency/body 重放并绑定同一 Session，完成后 reservation 标记 consumed，不能被第二来源或第二项目使用。
+- `dsh-subagent-code-agents` 每个渠道 manifest 暴露 `dsh.remote.channelRuntime`，启动从 Runtime Manager 获取绝对 executable。`ChannelExecutionPolicy` 只能来自目标 DSH Session 的受信 verifier；只有 Full Access 可用 bypass/always-approve/sandbox-off；Workspace Write 保留目标子会话审批，渠道无法兑现的组合启动前结构化拒绝。
 - 多 runtime 部分失败按逆序恢复旧版本；Session Control 仅在 runtime 同步、权限和认证前置条件均可证明成功后调用，回执绑定 desired digest、runtime identity 和 rollback 事实。
 
 ## 安装与运行
@@ -48,10 +48,16 @@ DSH 远程项目阶段 A/B/C：本机 Remote Control Connector、Linux x86_64 Re
 npm install
 node bin/dsh-remote-host.mjs bridge --stdio \
   --data-dir "$HOME/.dsh-remote/state" \
-  --session-control-socket /run/user/1000/dsh-session-control.sock
+  --session-control-socket /run/user/1000/dsh-session-control.sock \
+  --runtime-manager-socket /run/user/1000/dsh-runtime-manager.sock \
+  --runtime-manager-token-file /home/dsh/.dsh-remote/runtime-manager.token
 ```
 
 缺少 `--session-control-socket` 或 `--session-control-module`、socket probe 失败、或 port 未声明 `ready=true` 时，Remote Host 在启动前 fail closed，不宣称 `project.open` capability。若使用 module，它应导出 `createSessionControlPort()` 或默认的 `openProject()` port；它必须调用远端 DSH Host 内的正式 `dsh-session-control` 服务，不得直接写 Session JSONL 或 SQLite。正式 socket bridge 的配置见 `dsh-session-control` README。
+
+配置 `--runtime-manager-socket` 时，daemon 同时启动权限为 `0600` 的 Runtime Manager Unix service。它只接受带 Host-scoped capability token 的 `runtime-manager.ping`、`runtime-manager.inspect` 和 `runtime-manager.resolve`；token 文件不存在时由 daemon 原子生成，必须是当前用户拥有的 owner-only 普通文件，拒绝 symlink、可写父目录和权限漂移。resolve 外层同时携带稳定的 `runtimeManagerSourceHostId/runtimeManagerSourceSessionId` 与真实 `targetSessionId`：transport/controller 来源和远端 DSH target 是不同身份层，服务端用 project receipt 同时核对三者。DSH channel 通过同一 token 文件创建 `UnixSocketRuntimeManager`，不能注入 JS 函数或 manager 对象；socket 断开、daemon 重启、receipt 漂移和首次认证 lease 过期均返回结构化失败。
+
+Connector 不再隐式生成每次随机的生产身份。使用 `RemoteControlConnector.create({ identityFile })` 生成或恢复 owner-only 的 `connector-identity.json`，再把返回的 `sourceHostId/sourceSessionId` 与远端 DSH Host 上真实存在的 `controllerSessionId` 显式传给 `createRemoteProjectSourceRegistration(identity, { controllerSessionId })`，写入远端 `dsh-session-control` 的精确 `remoteProjectSourceAllowlist`。`sourceSessionId` 是 Connector 外部来源身份，不是远端 controller Session；缺少显式 controller 身份时 helper fail closed。未完成登记时服务端以 `REMOTE_PROJECT_SOURCE_NOT_REGISTERED` 和精确身份回报 `needs-attention`，不会把空 allowlist 当作允许全部来源。
 
 SSH `expectedFingerprint` 使用 OpenSSH `ssh-keygen -lf` 兼容的 `SHA256:<Base64>` 格式：摘要使用标准 Base64 字符集，保留 `+`、`/`，移除尾部 `=`；代码会先读取并比对固定 `known_hosts` 中的实际 key，再启动 SSH。
 

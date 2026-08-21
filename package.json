@@ -16,15 +16,18 @@
     ".": "./lib/index.mjs",
     "./protocol": "./lib/protocol.mjs",
     "./connector": "./lib/connector.mjs",
+    "./connector-identity": "./lib/connector-identity.mjs",
     "./remote-host": "./lib/remote-host.mjs",
     "./gateway": "./lib/gateway.mjs",
     "./ssh": "./lib/ssh.mjs",
     "./bootstrap": "./lib/bootstrap.mjs",
     "./desired-state": "./lib/desired-state.mjs",
+    "./runtime-requirement": "./lib/runtime-requirement.mjs",
     "./desired-state-registry": "./lib/desired-state-registry.mjs",
     "./plugin-sync": "./lib/plugin-sync.mjs",
     "./remote-artifact-installer": "./lib/remote-artifact-installer.mjs",
-    "./runtime-manager": "./lib/runtime-manager.mjs"
+    "./runtime-manager": "./lib/runtime-manager.mjs",
+    "./runtime-manager-service": "./lib/runtime-manager-service.mjs"
   },
   "files": [
     "bin",

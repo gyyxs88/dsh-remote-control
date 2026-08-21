@@ -9,6 +9,14 @@ import { createClientHello, createOperationEnvelope, sha256 } from '../lib/proto
 import { validateDesiredState } from '../lib/desired-state.mjs';
 
 const desired = { dshVersion: '0.1.0-rc.6', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' };
+const projectIdempotencyBody = ({ absolutePath, desiredState, targetSessionId, runtimeAuthTickets, displayName, schedule }) => ({
+  absolutePath,
+  desiredState: validateDesiredState(desiredState),
+  ...(targetSessionId ? { targetSessionId } : {}),
+  ...(runtimeAuthTickets ? { runtimeAuthTickets } : {}),
+  ...(displayName ? { displayName } : {}),
+  ...(schedule ? { schedule } : {}),
+});
 
 async function setup(options = {}) {
   return RemoteHostDaemon.create({ sessionControl: new FakeSessionControlPort(), ...options });
@@ -18,7 +26,7 @@ test('remote host creates absolute path -> workspace -> session idempotently', a
   const port = new FakeSessionControlPort();
   const daemon = await RemoteHostDaemon.create({ sessionControl: port });
   await daemon.handle(createClientHello({ sourceHostId: 'local', sourceSessionId: 'controller' }));
-  const make = (operationId) => createOperationEnvelope({ type: 'project.open', operationId, idempotencyKey: 'project-key', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: daemon.hostState.host.hostId, body: { absolutePath: '/srv/project', desiredState: desired } });
+  const make = (operationId) => createOperationEnvelope({ type: 'project.open', operationId, idempotencyKey: 'project-key', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: daemon.hostState.host.hostId, body: { absolutePath: '/srv/project', desiredState: desired }, idempotencyBody: projectIdempotencyBody({ absolutePath: '/srv/project', desiredState: desired }) });
   const first = await daemon.handle(make('op-1'));
   const second = await daemon.handle(make('op-2'));
   assert.equal(first.operation.state, 'completed');
@@ -37,7 +45,7 @@ test('project.open persists verified plugin sync status and reconcile returns it
     plugins: [{ id: 'remote-plugin', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'remote-plugin.tgz' }, sha256: 'a'.repeat(64), compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.6' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:remote'] }],
   };
   const normalized = validateDesiredState(desiredWithPlugin);
-  const request = createOperationEnvelope({ type: 'project.open', operationId: 'plugin-open-001', idempotencyKey: 'plugin-open-key', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: hostId, body: { absolutePath: '/srv/plugin-project', desiredState: desiredWithPlugin, pluginSync: { status: 'completed', desiredStateSha256: sha256(normalized), items: [{ key: 'plugin:remote-plugin@1.0.0', status: 'installed', version: '1.0.0', sha256: 'a'.repeat(64) }] } } });
+  const request = createOperationEnvelope({ type: 'project.open', operationId: 'plugin-open-001', idempotencyKey: 'plugin-open-key', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: hostId, body: { absolutePath: '/srv/plugin-project', desiredState: desiredWithPlugin, pluginSync: { status: 'completed', desiredStateSha256: sha256(normalized), items: [{ key: 'plugin:remote-plugin@1.0.0', status: 'installed', version: '1.0.0', sha256: 'a'.repeat(64) }] } }, idempotencyBody: projectIdempotencyBody({ absolutePath: '/srv/plugin-project', desiredState: desiredWithPlugin }) });
   const opened = await daemon.handle(request);
   assert.equal(opened.operation.state, 'completed');
   assert.equal(opened.operation.result.pluginSync.status, 'completed');
@@ -63,7 +71,8 @@ test('remote host refuses to start without a ready official Session Control port
 test('remote host refuses an external runtime without a verified runtime sync receipt', async () => {
   const daemon = await setup();
   await daemon.handle(createClientHello({ sourceHostId: 'local', sourceSessionId: 'controller' }));
-  const request = createOperationEnvelope({ type: 'project.open', idempotencyKey: 'needs-runtime', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: daemon.hostState.host.hostId, body: { absolutePath: '/srv/project', desiredState: { ...desired, runtimes: [{ id: 'codex', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'codex.tgz' }, sha256: 'a'.repeat(64), size: 10, target: 'linux-x86_64', packageName: 'dsh-runtime-codex', executablePath: 'bin/codex', protocolVersion: '1.0', driver: 'codex', authPolicy: 'remote-user', capabilities: ['headless'], compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.6' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:test'] }] } } });
+  const needsRuntimeState = { ...desired, runtimes: [{ id: 'codex', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'codex.tgz' }, sha256: 'a'.repeat(64), size: 10, target: 'linux-x86_64', packageName: 'dsh-runtime-codex', executablePath: 'bin/codex', protocolVersion: '1.0', driver: 'codex', authPolicy: 'remote-user', capabilities: ['headless'], compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.6' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:test'] }] };
+  const request = createOperationEnvelope({ type: 'project.open', idempotencyKey: 'needs-runtime', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: daemon.hostState.host.hostId, body: { absolutePath: '/srv/project', desiredState: needsRuntimeState }, idempotencyBody: projectIdempotencyBody({ absolutePath: '/srv/project', desiredState: needsRuntimeState }) });
   const response = await daemon.handle(request);
   assert.equal(response.operation.state, 'needs-attention');
   assert.equal(response.operation.error.code, 'RUNTIME_SYNC_NEEDS_ATTENTION');
@@ -87,7 +96,7 @@ test('operation and reconcile reads are bound to the handshaked source and targe
   const hostId = daemon.hostState.host.hostId;
   await daemon.handle(createClientHello({ sourceHostId: 'source-a', sourceSessionId: 'controller-a' }));
   await daemon.handle(createClientHello({ sourceHostId: 'source-b', sourceSessionId: 'controller-b' }));
-  const request = createOperationEnvelope({ type: 'project.open', idempotencyKey: 'source-a-project', sourceHostId: 'source-a', sourceSessionId: 'controller-a', targetHostId: hostId, body: { absolutePath: '/srv/project', desiredState: desired } });
+  const request = createOperationEnvelope({ type: 'project.open', idempotencyKey: 'source-a-project', sourceHostId: 'source-a', sourceSessionId: 'controller-a', targetHostId: hostId, body: { absolutePath: '/srv/project', desiredState: desired }, idempotencyBody: projectIdempotencyBody({ absolutePath: '/srv/project', desiredState: desired }) });
   const operation = await daemon.handle(request);
   const stolen = await daemon.handle({ type: 'operation.get', operationId: operation.operation.operationId, sourceHostId: 'source-b', sourceSessionId: 'controller-b', targetHostId: hostId });
   assert.equal(stolen.error.code, 'OPERATION_NOT_FOUND');

@@ -7,6 +7,7 @@ import { FakeTransport, RemoteControlConnector } from '../lib/connector.mjs';
 import { StageARuntimeManager } from '../lib/runtime-manager.mjs';
 import { createClientHello, createOperationEnvelope, sha256 } from '../lib/protocol.mjs';
 import { validateDesiredState } from '../lib/desired-state.mjs';
+import { DshRemoteError } from '../lib/errors.mjs';
 
 const desired = { dshVersion: '0.1.0-rc.6', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' };
 const projectIdempotencyBody = ({ absolutePath, desiredState, targetSessionId, runtimeAuthTickets, displayName, schedule }) => ({
@@ -34,6 +35,66 @@ test('remote host creates absolute path -> workspace -> session idempotently', a
   assert.equal(second.operation.result.workspaceId, 'workspace-1');
   assert.equal(second.operation.result.sessionId, 'session-1');
   assert.equal(port.calls.length, 1);
+});
+
+test('remote host exposes idempotent schedule deletion through the Connector and official port', async () => {
+  const port = new FakeSessionControlPort();
+  const daemon = await RemoteHostDaemon.create({ sessionControl: port });
+  const connector = new RemoteControlConnector({ transport: new FakeTransport(daemon), sourceHostId: 'local', sourceSessionId: 'controller' });
+  await connector.connect();
+  const first = await connector.deleteSchedule({ targetSessionId: 'session-target', scheduleId: 'schedule-1', idempotencyKey: 'schedule-delete-key' });
+  const second = await connector.deleteSchedule({ targetSessionId: 'session-target', scheduleId: 'schedule-1', idempotencyKey: 'schedule-delete-key' });
+  assert.equal(first.state, 'completed');
+  assert.equal(first.result.deleted, true);
+  assert.equal(second.operationId, first.operationId);
+  assert.equal(port.calls.filter((call) => call.kind === 'schedule.delete').length, 1);
+});
+
+test('schedule deletion retries the same operation after an unknown Session Control response', async () => {
+  let calls = 0;
+  const sessionControl = {
+    ready: true,
+    async openProject() { return { projectId: 'project', workspaceId: 'workspace', sessionId: 'session' }; },
+    async deleteSchedule(request) {
+      calls += 1;
+      if (calls === 1) throw new DshRemoteError('response lost', { code: 'SESSION_CONTROL_RESPONSE_INVALID' });
+      return { ok: true, duplicate: true, result: { id: request.scheduleId, deleted: true }, operation: { operation_id: 'delete-operation' } };
+    },
+  };
+  const daemon = await RemoteHostDaemon.create({ sessionControl });
+  const connector = new RemoteControlConnector({ transport: new FakeTransport(daemon), sourceHostId: 'local', sourceSessionId: 'controller' });
+  await connector.connect();
+  const first = await connector.deleteSchedule({ targetSessionId: 'session-target', scheduleId: 'schedule-1', idempotencyKey: 'schedule-delete-recovery' });
+  const second = await connector.deleteSchedule({ targetSessionId: 'session-target', scheduleId: 'schedule-1', idempotencyKey: 'schedule-delete-recovery' });
+  assert.equal(first.state, 'needs-attention');
+  assert.equal(second.state, 'completed');
+  assert.equal(second.operationId, first.operationId);
+  assert.equal(second.result.duplicate, true);
+  assert.equal(calls, 2);
+});
+
+test('missing Session Control identity is recoverable through the same idempotency key', async () => {
+  let calls = 0;
+  const sessionControl = {
+    ready: true,
+    async probe() { return { type: 'remote-project.pong' }; },
+    async openProject() {
+      calls += 1;
+      if (calls === 1) return { state: 'completed' };
+      return { projectId: 'project-recovered', workspaceId: 'workspace-recovered', sessionId: 'session-recovered', state: 'completed' };
+    },
+  };
+  const daemon = await RemoteHostDaemon.create({ sessionControl });
+  await daemon.handle(createClientHello({ sourceHostId: 'local', sourceSessionId: 'controller' }));
+  const make = (operationId) => createOperationEnvelope({ type: 'project.open', operationId, idempotencyKey: 'recover-identity-key', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: daemon.hostState.host.hostId, body: { absolutePath: '/srv/recover', desiredState: desired }, idempotencyBody: projectIdempotencyBody({ absolutePath: '/srv/recover', desiredState: desired }) });
+  const first = await daemon.handle(make('recover-op-1'));
+  assert.equal(first.operation.state, 'needs-attention');
+  assert.equal(first.operation.error.code, 'SESSION_CONTROL_RESULT_INVALID');
+  const second = await daemon.handle(make('recover-op-2'));
+  assert.equal(second.operation.operationId, 'recover-op-1');
+  assert.equal(second.operation.state, 'completed');
+  assert.equal(second.operation.result.sessionId, 'session-recovered');
+  assert.equal(calls, 2);
 });
 
 test('project.open persists verified plugin sync status and reconcile returns it without owning Session storage', async () => {

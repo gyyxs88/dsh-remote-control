@@ -4,13 +4,21 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
-import { buildReverseTunnelArgs, buildStdioBridgeArgs, SshCommandTransport, SshStdioBridge } from '../lib/ssh.mjs';
+import { buildLocalTunnelArgs, buildReverseTunnelArgs, buildStdioBridgeArgs, SshCommandTransport, SshStdioBridge } from '../lib/ssh.mjs';
 import { verifyPinnedHostKeySync } from '../lib/ssh.mjs';
 import { ModelGateway } from '../lib/gateway.mjs';
 import { DshRemoteError } from '../lib/errors.mjs';
 
 const PUBLIC_KEY_BLOB = 'c3RhZ2UtYS10ZXN0LWtleS0w';
 const OPENSSH_FINGERPRINT = 'SHA256:CQIRjvR3rCs2JqJMaIHc6XKyO7tbZZ+ohOLiwi2pN48';
+const REMOTE_HOST_OPTIONS = {
+  sessionControlSocket: '/run/user/1000/dsh-session-control.sock',
+  runtimeManagerSocket: '/run/user/1000/dsh-runtime-manager.sock',
+  runtimeManagerTokenFile: '/home/test/.dsh-remote/runtime-manager.token',
+  runtimeRoot: '/home/test/.dsh-remote/runtimes',
+  allowedRoot: '/home/test/projects',
+  hostId: 'remote-stage-a',
+};
 
 test('SSH bridge and reverse tunnel pin the actual known_hosts key and fail closed on policy injection', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-ssh-pin-'));
@@ -21,18 +29,25 @@ test('SSH bridge and reverse tunnel pin the actual known_hosts key and fail clos
     await writeFile(knownHosts, `remote-stage-a ssh-ed25519 ${publicKey}\n`);
     const policy = { knownHostsFile: knownHosts, hostKeyAlias: 'remote-stage-a', expectedFingerprint: fingerprint };
     assert.equal(verifyPinnedHostKeySync(policy).fingerprint, OPENSSH_FINGERPRINT);
-    assert.throws(() => buildStdioBridgeArgs({ host: '-oProxyCommand=bad', policy }), DshRemoteError);
-    assert.throws(() => buildStdioBridgeArgs({ host: 'user@example', policy: { ...policy, expectedFingerprint: 'SHA256:wrong' } }), DshRemoteError);
-    const bridge = buildStdioBridgeArgs({ host: 'user@example', policy, dataDir: '/home/test/.dsh-remote/host' });
-  assert.ok(bridge.includes('StrictHostKeyChecking=yes'));
-  assert.ok(bridge.includes('HostKeyAlias=remote-stage-a'));
+    assert.throws(() => buildStdioBridgeArgs({ host: '-oProxyCommand=bad', policy, dataDir: '/home/test/.dsh-remote/host', remoteHostOptions: REMOTE_HOST_OPTIONS }), DshRemoteError);
+    assert.throws(() => buildStdioBridgeArgs({ host: 'user@example', policy: { ...policy, expectedFingerprint: 'SHA256:wrong' }, dataDir: '/home/test/.dsh-remote/host', remoteHostOptions: REMOTE_HOST_OPTIONS }), DshRemoteError);
+    assert.throws(() => buildStdioBridgeArgs({ host: 'user@example', policy, dataDir: '/home/test/.dsh-remote/host' }), (error) => error.code === 'SSH_REMOTE_HOST_OPTIONS_REQUIRED');
+    const bridge = buildStdioBridgeArgs({ host: 'user@example', policy, dataDir: '/home/test/.dsh-remote/host', remoteHostOptions: REMOTE_HOST_OPTIONS });
+    assert.ok(bridge.includes('StrictHostKeyChecking=yes'));
+    assert.ok(bridge.includes('HostKeyAlias=remote-stage-a'));
     assert.ok(bridge.at(-1).includes('dsh-remote-host'));
     assert.ok(bridge.at(-1).includes("'dsh-remote-host'"));
-    assert.throws(() => buildStdioBridgeArgs({ host: 'user@example', policy, extraArgs: ['-o', 'ProxyCommand=bad'] }), DshRemoteError);
+    assert.ok(bridge.at(-1).includes("'--session-control-socket'"));
+    assert.ok(bridge.at(-1).includes("'--runtime-manager-token-file'"));
+    assert.throws(() => buildStdioBridgeArgs({ host: 'user@example', policy, dataDir: '/home/test/.dsh-remote/host', remoteHostOptions: REMOTE_HOST_OPTIONS, extraArgs: ['-o', 'ProxyCommand=bad'] }), DshRemoteError);
     const tunnel = buildReverseTunnelArgs({ host: 'user@example', policy, localPort: 18080, remotePort: 18081 });
-  assert.ok(tunnel.includes('ExitOnForwardFailure=yes'));
-  assert.ok(tunnel.includes('127.0.0.1:18081:127.0.0.1:18080'));
+    assert.ok(tunnel.includes('ExitOnForwardFailure=yes'));
+    assert.ok(tunnel.includes('127.0.0.1:18081:127.0.0.1:18080'));
     assert.throws(() => buildReverseTunnelArgs({ host: 'user@example', policy, localPort: 18080, remotePort: 18081, bindAddress: '0.0.0.0' }), DshRemoteError);
+    const localTunnel = buildLocalTunnelArgs({ host: 'user@example', policy, localPort: 18082, remotePort: 3180 });
+    assert.ok(localTunnel.includes('-L'));
+    assert.ok(localTunnel.includes('127.0.0.1:18082:127.0.0.1:3180'));
+    assert.throws(() => buildLocalTunnelArgs({ host: 'user@example', policy, localPort: 18082, remotePort: 3180, bindAddress: '0.0.0.0' }), DshRemoteError);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -77,6 +92,11 @@ test('SSH command transport enforces timeout and preserves quoted remote argv', 
     await transport.execArgv(['node', '/tmp/a path', '--value', "quote's	safe"]);
     assert.equal(captured.command, 'ssh');
     assert.match(captured.args.at(-1), /quote.*safe/u);
+    await transport.upload('C:\\artifacts\\plugin.tgz', '/home/test/.dsh-remote/staging/plugin.tgz');
+    assert.equal(captured.command, 'scp');
+    assert.equal(captured.args.at(-1), 'user@example:/home/test/.dsh-remote/staging/plugin.tgz');
+    assert.equal(captured.args.at(-1).includes("'"), false);
+    assert.throws(() => transport.upload('C:\\artifacts\\plugin.tgz', '/home/test/bad path/plugin.tgz'), (error) => error.code === 'SSH_UPLOAD_PATH_INVALID');
     const spawnTimeout = () => {
       const child = new EventEmitter();
       child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.stdout.setEncoding = () => {}; child.stderr.setEncoding = () => {}; child.stdin = { end() {} }; child.kill = () => {};
@@ -106,7 +126,7 @@ test('SSH stdio bridge bounds frames, rejects unknown responses and resets on ex
       children.push(child);
       return child;
     };
-    const bridge = new SshStdioBridge({ policy, host: 'user@example', command: 'dsh-remote-host', dataDir: '/home/test/.dsh-remote/host', spawnImpl, requestTimeoutMs: 100, maxFrameBytes: 1024, maxPending: 2 });
+    const bridge = new SshStdioBridge({ policy, host: 'user@example', command: 'dsh-remote-host', dataDir: '/home/test/.dsh-remote/host', remoteHostOptions: REMOTE_HOST_OPTIONS, spawnImpl, requestTimeoutMs: 100, maxFrameBytes: 1024, maxPending: 2 });
     const first = bridge.request({ type: 'gateway.probe' });
     const child = children[0];
     await new Promise((resolve) => setImmediate(resolve));

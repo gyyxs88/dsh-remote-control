@@ -1,9 +1,31 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, realpath, readdir, rename, rm, stat, lstat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, realpath, readdir, rename, rm, stat, lstat, symlink, writeFile } from 'node:fs/promises';
 import { basename, join, posix } from 'node:path';
-import { validateInstallerInputs } from '../lib/installer-policy.mjs';
+
+// This entrypoint is intentionally self-contained: it is the only executable
+// available before the first Remote Host package has been installed.
+const VERSION = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/u;
+const PROTOCOL = /^\d+\.\d+$/u;
+
+function installerError(message, code) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function validateInstallerInputs({ platform = process.platform, arch = process.arch, uid = typeof process.getuid === 'function' ? process.getuid() : null, version, protocolVersion, installRoot, artifact, expectedSha, atomic = false, noRoot = false } = {}) {
+  if (platform !== 'linux' || arch !== 'x64') throw installerError('installer only supports Linux x86_64', 'INSTALLER_PLATFORM_UNSUPPORTED');
+  if (uid === 0) throw installerError('installer refuses to run as root', 'INSTALLER_ROOT_FORBIDDEN');
+  if (!VERSION.test(version ?? '')) throw installerError('version is not a supported semver value', 'INSTALLER_VERSION_INVALID');
+  if (!PROTOCOL.test(protocolVersion ?? '')) throw installerError('protocol-version is invalid', 'INSTALLER_PROTOCOL_INVALID');
+  if (typeof installRoot !== 'string' || !posix.isAbsolute(installRoot) || installRoot.split('/').includes('..') || /[\0\r\n]/u.test(installRoot)) throw installerError('install-root must be a safe absolute POSIX path', 'INSTALLER_PATH_INVALID');
+  if (typeof artifact !== 'string' || !posix.isAbsolute(artifact) || artifact.split('/').includes('..') || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.tgz$/u.test(posix.basename(artifact)) || /[\0\r\n]/u.test(artifact)) throw installerError('artifact path is invalid', 'INSTALLER_ARTIFACT_INVALID');
+  if (!/^[a-f0-9]{64}$/u.test(expectedSha ?? '')) throw installerError('artifact digest is invalid', 'INSTALLER_DIGEST_INVALID');
+  if (atomic !== true || noRoot !== true) throw installerError('installer requires atomic and no-root policy', 'INSTALLER_POLICY_REQUIRED');
+  return { version, protocolVersion, installRoot: posix.normalize(installRoot), artifact, expectedSha };
+}
 
 function option(name) {
   const index = process.argv.indexOf(`--${name}`);
@@ -117,11 +139,24 @@ async function install() {
     const packageInfo = await stat(packageRoot);
     if (!packageInfo.isDirectory()) throw new Error('artifact does not contain a package directory');
     await assertSafeTree(packageRoot);
-    await stat(join(packageRoot, 'bin', 'dsh-remote-host.mjs'));
+    const executableEntries = [
+      'dsh-remote-host.mjs',
+      'dsh-remote-host-installer.mjs',
+      'dsh-remote-artifact-installer.mjs',
+      'dsh-model-gateway.mjs',
+    ];
+    for (const entry of executableEntries) {
+      const entryPath = join(packageRoot, 'bin', entry);
+      const entryInfo = await stat(entryPath);
+      if (!entryInfo.isFile()) throw new Error(`installed bin entry is not a regular file: ${entry}`);
+      const source = await readFile(entryPath, 'utf8');
+      if (source.startsWith('#!/usr/bin/env node\r\n')) await writeFile(entryPath, source.replace(/^#!\/usr\/bin\/env node\r\n/u, '#!/usr/bin/env node\n'));
+      await chmod(entryPath, 0o700);
+    }
     await stat(join(packageRoot, 'lib', 'remote-host.mjs'));
     await writeFile(join(packageRoot, 'manifest.json'), `${JSON.stringify({ name: basename(artifact), version, protocolVersion, target: 'linux-x86_64', sha256: expectedSha, size: artifactBytes.length }, null, 2)}\n`, { mode: 0o600 });
     try {
-      const existing = JSON.parse(await readFile(join(versionRoot, 'manifest.json'), 'utf8'));
+      const existing = JSON.parse(await readFile(join(versionRoot, 'package', 'manifest.json'), 'utf8'));
       if (existing.name !== basename(artifact) || existing.target !== 'linux-x86_64' || existing.protocolVersion !== protocolVersion || existing.sha256 !== expectedSha || existing.version !== version || existing.size !== artifactBytes.length) throw new Error('same version is already installed with a different artifact');
       await assertSafeTree(join(versionRoot, 'package'));
       await rm(tempRoot, { recursive: true, force: true });

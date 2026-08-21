@@ -131,6 +131,8 @@ registry 对本机固定文件做 regular-file、大小、SHA-256、tar entry、
 
 Remote Host 先检查 allowed root 和 Runtime Manager，再通过 `SessionControlPort.openProject()` 调用目标 Host 的正式 `dsh-session-control` 服务。该 port 负责按既有语义创建/复用目录、Workspace、Session、权限和 Schedule；返回的 `workspaceId`/`sessionId` 才能写入本仓库的 Project 摘要。Partial 成功原样保留，不删除用户目录、Git 数据或已经创建的会话。
 
+Schedule 清理使用独立的 `schedule.delete` operation：正文固定 `targetSessionId + scheduleId`，外层继续绑定 source/target/idempotency/body hash/permission snapshot。Remote Host 只调用正式 `SessionControlPort.deleteSchedule()`；成功回执保存 Session Control operation id，不直接写目标 Session。transport/response 终态未知时进入 needs-attention，只允许同一来源、同一正文和同一幂等键重放。
+
 ### Runtime 状态与认证 challenge
 
 Runtime Manager 只返回以下状态：`not-required`、`missing`、`installing`、`auth-required`、`ready`、`installed-auth-unverified`、`update-required`、`incompatible`、`degraded`。没有可靠且不计费的认证探测时，安装/探测成功只能是 `installed-auth-unverified`；首次真实调用若发现未认证，必须转为 `auth-required`，不能伪造 `ready`。

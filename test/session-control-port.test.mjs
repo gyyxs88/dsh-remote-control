@@ -19,7 +19,9 @@ test('UnixSocketSessionControlPort probes and delegates the formal bridge contra
       const request = JSON.parse(buffer.slice(0, index));
       const response = request.type === 'remote-project.ping'
         ? { type: 'remote-project.pong', hostId: request.hostId, protocolVersion: '1.0' }
-        : { type: 'remote-project.result', result: { projectId: 'p', workspaceId: 'w', sessionId: 's', workspacePath: '/srv/p', state: 'completed' } };
+        : request.type === 'remote-project.schedule-delete'
+          ? { type: 'remote-project.schedule-delete-result', result: { ok: true, result: { deleted: true } } }
+          : { type: 'remote-project.result', result: { projectId: 'p', workspaceId: 'w', sessionId: 's', workspacePath: '/srv/p', state: 'completed' } };
       socket.end(`${JSON.stringify(response)}\n`);
     });
   });
@@ -29,6 +31,8 @@ test('UnixSocketSessionControlPort probes and delegates the formal bridge contra
     assert.equal((await port.probe()).hostId, 'remote-host');
     const result = await port.openProject({ absolutePath: '/srv/p', idempotencyKey: 'key', desiredState: { defaultPermission: 'workspace-write' } }, { sourceHostId: 'local-host', sourceSessionId: 'controller', operationId: 'op-1' });
     assert.equal(result.sessionId, 's');
+    const deleted = await port.deleteSchedule({ targetSessionId: 's', scheduleId: 'schedule-1', idempotencyKey: 'delete-key-001' }, { sourceHostId: 'local-host', sourceSessionId: 'controller', operationId: 'op-2' });
+    assert.equal(deleted.result.deleted, true);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     await rm(root, { recursive: true, force: true });

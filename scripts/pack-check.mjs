@@ -25,9 +25,9 @@ try {
   if (install.status !== 0) throw new Error(`packed tgz install failed: ${install.stderr ?? install.error?.message ?? 'unknown error'}`);
   const packageRoot = join(consumer, 'node_modules', 'dsh-remote-control');
   const packageEntry = pathToFileURL(join(packageRoot, 'lib', 'index.mjs')).href;
-  const importCheck = spawnSync(process.execPath, ['-e', `const m=await import(${JSON.stringify(packageEntry)}); if(typeof m.RemoteControlConnector!=='function'||typeof m.RemoteHostDaemon!=='function'||typeof m.ModelGateway!=='function'||typeof m.DesiredStateSynchronizer!=='function'||typeof m.TrustedArtifactRegistry!=='function'||typeof m.InstalledRuntimeManager!=='function'||typeof m.RuntimeSynchronizer!=='function') process.exit(2)`], { encoding: 'utf8', stdio: 'pipe' });
+  const importCheck = spawnSync(process.execPath, ['-e', `const m=await import(${JSON.stringify(packageEntry)}); if(typeof m.RemoteControlConnector!=='function'||typeof m.RemoteHostDaemon!=='function'||typeof m.ModelGateway!=='function'||typeof m.DesiredStateSynchronizer!=='function'||typeof m.TrustedArtifactRegistry!=='function'||typeof m.InstalledRuntimeManager!=='function'||typeof m.RuntimeSynchronizer!=='function'||typeof m.DshHostBootstrapper!=='function'||typeof m.DshHttpClient!=='function') process.exit(2)`], { encoding: 'utf8', stdio: 'pipe' });
   if (importCheck.status !== 0) throw new Error(`packed import smoke failed: ${importCheck.stderr}`);
-  for (const file of ['dsh-remote-host.mjs', 'dsh-remote-host-installer.mjs', 'dsh-remote-artifact-installer.mjs', 'dsh-model-gateway.mjs']) {
+  for (const file of ['dsh-remote-host.mjs', 'dsh-remote-host-installer.mjs', 'dsh-remote-dsh-installer.mjs', 'dsh-remote-artifact-installer.mjs', 'dsh-model-gateway.mjs']) {
     const check = spawnSync(process.execPath, ['--check', join(packageRoot, 'bin', file)], { encoding: 'utf8', stdio: 'pipe' });
     if (check.status !== 0) throw new Error(`packed bin smoke failed for ${file}: ${check.stderr}`);
   }
@@ -50,7 +50,7 @@ try {
   gateway.kill();
   await once(gateway, 'exit');
   gatewayProcess = null;
-  console.log(JSON.stringify({ status: 'passed', tarball: tgz, imported: true, binsChecked: 4 }));
+  console.log(JSON.stringify({ status: 'passed', tarball: tgz, imported: true, binsChecked: 5 }));
 } finally {
   if (gatewayProcess && !gatewayProcess.killed) gatewayProcess.kill();
   await rm(root, { recursive: true, force: true });

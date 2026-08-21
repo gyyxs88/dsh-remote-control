@@ -3,20 +3,24 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { buildReverseTunnelArgs, buildStdioBridgeArgs, SshCommandTransport, SshStdioBridge } from '../lib/ssh.mjs';
+import { verifyPinnedHostKeySync } from '../lib/ssh.mjs';
 import { ModelGateway } from '../lib/gateway.mjs';
 import { DshRemoteError } from '../lib/errors.mjs';
+
+const PUBLIC_KEY_BLOB = 'c3RhZ2UtYS10ZXN0LWtleS0w';
+const OPENSSH_FINGERPRINT = 'SHA256:CQIRjvR3rCs2JqJMaIHc6XKyO7tbZZ+ohOLiwi2pN48';
 
 test('SSH bridge and reverse tunnel pin the actual known_hosts key and fail closed on policy injection', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-ssh-pin-'));
   try {
-    const publicKey = Buffer.from('stage-a-test-key').toString('base64');
-    const fingerprint = `SHA256:${createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest('base64url')}`;
+    const publicKey = PUBLIC_KEY_BLOB;
+    const fingerprint = OPENSSH_FINGERPRINT;
     const knownHosts = join(root, 'known_hosts');
     await writeFile(knownHosts, `remote-stage-a ssh-ed25519 ${publicKey}\n`);
     const policy = { knownHostsFile: knownHosts, hostKeyAlias: 'remote-stage-a', expectedFingerprint: fingerprint };
+    assert.equal(verifyPinnedHostKeySync(policy).fingerprint, OPENSSH_FINGERPRINT);
     assert.throws(() => buildStdioBridgeArgs({ host: '-oProxyCommand=bad', policy }), DshRemoteError);
     assert.throws(() => buildStdioBridgeArgs({ host: 'user@example', policy: { ...policy, expectedFingerprint: 'SHA256:wrong' } }), DshRemoteError);
     const bridge = buildStdioBridgeArgs({ host: 'user@example', policy, dataDir: '/home/test/.dsh-remote/host' });
@@ -56,8 +60,8 @@ test('Model Gateway exposes only loopback and validates host-scoped model access
 test('SSH command transport enforces timeout and preserves quoted remote argv', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-ssh-transport-'));
   try {
-    const publicKey = Buffer.from('stage-a-test-key').toString('base64');
-    const fingerprint = `SHA256:${createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest('base64url')}`;
+    const publicKey = PUBLIC_KEY_BLOB;
+    const fingerprint = OPENSSH_FINGERPRINT;
     const knownHosts = join(root, 'known_hosts');
     await writeFile(knownHosts, `remote-stage-a ssh-ed25519 ${publicKey}\n`);
     const policy = { knownHostsFile: knownHosts, hostKeyAlias: 'remote-stage-a', expectedFingerprint: fingerprint };
@@ -87,8 +91,8 @@ test('SSH command transport enforces timeout and preserves quoted remote argv', 
 test('SSH stdio bridge bounds frames, rejects unknown responses and resets on exit', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-ssh-stdio-'));
   try {
-    const publicKey = Buffer.from('stage-a-test-key').toString('base64');
-    const fingerprint = `SHA256:${createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest('base64url')}`;
+    const publicKey = PUBLIC_KEY_BLOB;
+    const fingerprint = OPENSSH_FINGERPRINT;
     const knownHosts = join(root, 'known_hosts');
     await writeFile(knownHosts, `remote-stage-a ssh-ed25519 ${publicKey}\n`);
     const policy = { knownHostsFile: knownHosts, hostKeyAlias: 'remote-stage-a', expectedFingerprint: fingerprint };

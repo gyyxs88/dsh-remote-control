@@ -35,9 +35,11 @@ node bin/dsh-remote-host.mjs bridge --stdio \
 
 缺少 `--session-control-socket` 或 `--session-control-module`、socket probe 失败、或 port 未声明 `ready=true` 时，Remote Host 在启动前 fail closed，不宣称 `project.open` capability。若使用 module，它应导出 `createSessionControlPort()` 或默认的 `openProject()` port；它必须调用远端 DSH Host 内的正式 `dsh-session-control` 服务，不得直接写 Session JSONL 或 SQLite。正式 socket bridge 的配置见 `dsh-session-control` README。
 
+SSH `expectedFingerprint` 使用 OpenSSH `ssh-keygen -lf` 兼容的 `SHA256:<Base64>` 格式：摘要使用标准 Base64 字符集，保留 `+`、`/`，移除尾部 `=`；代码会先读取并比对固定 `known_hosts` 中的实际 key，再启动 SSH。
+
 ### 首次安装
 
-首装不依赖远端预装本包。部署层先用 `npm pack` 产生固定版本的 `.tgz`，在受信 catalog 中登记 artifact 的 `version/name/target/protocolVersion/size/sha256` 以及 installer 的 `installerSha256`，然后通过 `SshCommandTransport` 上传 installer 和 artifact。计划依次执行 `mkdir`、远端 `sha256sum` 校验 installer、`node dsh-remote-host-installer.mjs ... --atomic --no-root` 和清理；installer 将包放入 `versions/<version>/package`，再原子切换 `current`。`remoteRoot` 必须是远端绝对 POSIX 路径，不能使用会被远端 shell 误解释的 `~`。
+首装不依赖远端预装本包。部署层先用 `npm pack` 产生固定版本的 `.tgz`，在受信 catalog 中登记 artifact 的 `version/name/target/protocolVersion/size/sha256` 以及 installer 的 `installerSha256`，然后通过 `SshCommandTransport` 上传 installer 和 artifact。计划依次执行 `mkdir`、远端 `sha256sum` 校验 installer、`node dsh-remote-host-installer.mjs ... --atomic --no-root`、已安装 entrypoint probe 和清理；installer 将包放入 `versions/<version>/package`，再原子切换 `current`。若清理响应丢失，对账使用 `current/bin/dsh-remote-host-installer.mjs --status` 和持久 manifest，不依赖已删除的 staging 文件。`remoteRoot` 必须是远端绝对 POSIX 路径，不能使用会被远端 shell 误解释的 `~`。
 
 本机 Gateway 由 DSH 控制面独立启动：
 

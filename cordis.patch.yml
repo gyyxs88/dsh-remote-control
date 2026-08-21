@@ -1,0 +1,8 @@
+# Safe by default: configure the same explicit controller Session ids used by
+# dsh-session-control before remote tools are mounted.
+- insert:
+    - id: dsh-remote-control
+      name: 'dsh-remote-control/plugin'
+      config:
+        controllerSessionIds: []
+        stateDir: '.dsh-remote-control'

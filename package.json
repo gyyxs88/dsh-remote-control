@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-control",
-  "version": "0.1.13",
+  "version": "0.2.0",
   "description": "DSH remote project control, trusted Desired State/runtime sync and Model Gateway bridge",
   "type": "module",
   "engines": {
@@ -15,6 +15,8 @@
   },
   "exports": {
     ".": "./lib/index.mjs",
+    "./plugin": "./lib/dsh-plugin.mjs",
+    "./package.json": "./package.json",
     "./protocol": "./lib/protocol.mjs",
     "./connector": "./lib/connector.mjs",
     "./connector-identity": "./lib/connector-identity.mjs",
@@ -24,6 +26,11 @@
     "./bootstrap": "./lib/bootstrap.mjs",
     "./dsh-host-bootstrap": "./lib/dsh-host-bootstrap.mjs",
     "./dsh-http-client": "./lib/dsh-http-client.mjs",
+    "./host-registry": "./lib/host-registry.mjs",
+    "./ssh-discovery": "./lib/ssh-discovery.mjs",
+    "./control-artifacts": "./lib/control-artifacts.mjs",
+    "./managed-host": "./lib/managed-host.mjs",
+    "./remote-project-controller": "./lib/remote-project-controller.mjs",
     "./desired-state": "./lib/desired-state.mjs",
     "./runtime-requirement": "./lib/runtime-requirement.mjs",
     "./desired-state-registry": "./lib/desired-state-registry.mjs",
@@ -36,6 +43,8 @@
     "bin",
     "lib",
     "docs",
+    "skills",
+    "cordis.patch.yml",
     "README.md",
     "LICENSE"
   ],
@@ -46,6 +55,27 @@
     "test:stage-b": "node scripts/run-tests.mjs",
     "test:stage-c": "node scripts/run-tests.mjs",
     "pack:check": "node scripts/pack-check.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "control": {
+      "manifestVersion": "1.0",
+      "pluginId": "dsh-remote-control",
+      "version": "0.2.0",
+      "placements": ["control"],
+      "protocolVersion": "1.0",
+      "apiVersion": "1.0",
+      "dshCompatibility": {"min": "0.1.0-rc.6", "max": "0.1.0-rc.6"},
+      "capabilities": ["remote.host.registry", "remote.host.bootstrap", "remote.project.open", "remote.project.reconcile", "remote.schedule.create", "remote.schedule.delete"],
+      "bundledSkills": [{"id": "dsh-remote-project", "version": "0.1.0", "sha256": "2e2f8c05eaf192961e07766c30463aed5fcb189f1bfc7e10df5f551e35adc73d"}]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "3.18.1",
+    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.6",
+    "dsh-session-control": "0.6.4"
   },
   "license": "MIT"
 }

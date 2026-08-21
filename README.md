@@ -1,6 +1,6 @@
 # dsh-remote-control
 
-DSH 远程项目阶段 A/B/C：本机 Remote Control Connector、Linux x86_64 上锁定版 DSH/Remote Host 自动部署、stdio bridge、版本化插件/Skill/Runtime Desired State 同步、外部 Agent Runtime Manager、远端 operation/revision 对账，以及独立本机 Model Gateway 的 SSH 反向隧道接线。
+DSH 远程项目控制插件：内置控制端 `dsh-remote-project` Skill 和 `remote_*` 工具，本机负责 SSH 主机登记、Linux x86_64 上锁定版 DSH/Remote Host 自动部署、stdio bridge、版本化插件/Skill/Runtime Desired State 同步、远端 operation/revision 对账，以及独立本机 Model Gateway 的 SSH 反向隧道接线。
 
 本仓库是公开的跨主机控制面仓库：<https://github.com/gyyxs88/dsh-remote-control>。
 
@@ -44,6 +44,32 @@ DSH 远程项目阶段 A/B/C：本机 Remote Control Connector、Linux x86_64 �
 ## 安装与运行
 
 本机依赖 Node.js 22 或更高版本；`dsh-session-control` 的正式 socket bridge 依赖 Node.js 24。Remote Host 正式目标是 Linux x86_64。冷启动部署要求远端已有 Node.js 24、npm、Corepack、tar、systemd user service，并为该非 root 用户启用 linger；不要求预装 DSH、pnpm、本仓库或项目插件，也不要求 root。`DshHostBootstrapper` 会自动安装并探测 DSH，再通过 loopback SSH local tunnel 创建固定 controller Session、激活正式 `dsh-session-control` profile；完成后 Remote Host 才能启动：
+
+### DSH 控制端插件与 Skill
+
+包内 `cordis.patch.yml` 通过 `dsh-remote-control/plugin` 加载控制端插件。把 `controllerSessionIds` 配成与 `dsh-session-control` 相同的显式控制会话；空数组不会向任何 Session 挂载工具：
+
+```yaml
+- insert:
+    - id: dsh-remote-control
+      name: dsh-remote-control/plugin
+      config:
+        controllerSessionIds:
+          - session-your-controller
+        stateDir: .dsh-remote-control
+        # 默认使用当前 DSH 安装根中的 package.json/package-lock.json。
+        dshRecipeRoot: D:/path/to/dsh-install
+        # 与控制插件安装在同一 profile 时可自动解析；开发环境可显式填写。
+        sessionControlPackageRoot: D:/path/to/dsh-session-control
+```
+
+插件注册 `remote_host_list/probe/add/update/remove/inspect`、`remote_project_open/reconcile` 和 `remote_schedule_create/delete`。bundled Skill 位于 `skills/dsh-remote-project/SKILL.md`，会自动注册为模型和用户均可调用的 Skill。用户以后可以直接说：
+
+> 连接 212 主机的 `/home/leyi/Projects/demo`，没有就创建，然后开一个 Workspace Write 会话。
+
+Skill 会先查本机 owner-only 主机注册表。首次未知主机只探测公开 Host Key 指纹，必须由用户通过可信渠道核对精确指纹后才登记；不会自动接受未知 key。第一次打开项目时，控制器从当前已安装且受信的本包、`dsh-session-control` 和精确 DSH lock recipe 生成无 lifecycle 的固定 `.tgz`，计算摘要并完成非 root 部署。项目不能提交下载 URL、Shell 安装脚本或自证摘要。
+
+`remote_host_remove` 只删除本机登记和连接，不卸载远端组件、不删除目录、Workspace 或 Session。主控制会话为 `danger-full-access` 时可以自主执行；`workspace-write` 的变更操作仍由当前控制会话人工审批，relay 轮次一律不能使用远程工具。
 
 ```bash
 npm install
@@ -107,8 +133,8 @@ npm run pack:check
 - 有副作用请求必须带 `operationId`、`idempotencyKey`、来源/目标身份、正文哈希和权限快照。
 - 网络中断后先查询 operation；无法证明终态时进入 `needs-attention`，不盲目重复创建 Workspace、Session 或绑定。
 - Session Control 已执行但返回身份字段不可判定时同样进入 `needs-attention`；只允许原来源、同正文和同幂等键重放，由 Session Control 返回同一 Workspace/Session 后再完成 Remote Host receipt。
-- 远端项目创建附带 Schedule 后，清理通过正式 Unix Socket `remote-project.schedule-delete` 调用 Session Control 的 `deleteSchedule`；请求绑定来源 controller、目标 Session、schedule id 与幂等键，不直接改 Session 日志。
-- 本机通过 `RemoteControlConnector.deleteSchedule()` 提交 `schedule.delete` operation；响应丢失只允许同来源、同正文和同幂等键重放，远端以正式 Session Control operation 对账，不需要另开 SSH 命令绕过控制通道。
+- 远端 Schedule 创建/删除通过正式 Unix Socket `remote-project.schedule-create/delete` 调用 Session Control 的 `createSchedule/deleteSchedule`；请求绑定来源 controller、目标 Session 与独立幂等键，不通过重开项目或直接改 Session 日志冒充。
+- 本机通过 `RemoteControlConnector.createSchedule()/deleteSchedule()` 提交 operation；响应丢失只允许同来源、同正文和同幂等键重放，远端以正式 Session Control operation 对账，不需要另开 SSH 命令绕过控制通道。
 - Remote Host 重启会把未到达 durable terminal state 的 operation 标为 `needs-attention`，Connector 只接受同一 incarnation 的不回退 revision。
 - 审计状态只保存摘要、标识、结果和错误，不保存 prompt 全文、Gateway token、API Key、Cookie 或认证文件。
 

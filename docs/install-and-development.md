@@ -8,6 +8,7 @@ npm install
 npm run check
 npm run test:stage-a
 npm run test:stage-b
+npm run test:stage-c
 npm run pack:check
 ```
 
@@ -26,6 +27,23 @@ npm run pack:check
 8. 远端插件布局为 `<remoteRoot>/plugins/<id>/versions/<version>`，Skill 布局为 `<remoteRoot>/skills/<id>/versions/<version>`；只有 manifest、package identity、归档树和探测全部通过才原子切换 `current`。旧版本永不因升级删除，正在使用的版本不会被改写。正式 `--rollback` 只允许切回同 kind/id 下 manifest、版本、SHA-256、size、package、target、protocol 和 safeTree 均通过的已存在版本，或安全撤销到 `missing`。
 9. 插件自带 Skill 必须由 plugin `dsh.remote.bundledSkills` manifest 按版本和摘要绑定；项目 Skill 没有 `bundledWith` 时独立传输。凭据、Session JSONL/SQLite、operation 状态、日志、缓存、本机插件状态均不在同步范围内。
 10. 每个 action 开始前记录 previous current receipt；后续 action 确定失败时，按逆序调用 `--rollback` 恢复本轮可能切换的 action。同步回执保留 rollback `attempted`、`completed`、`failed` 或 `unknown`。同步清理或 rollback 响应丢失时，只用稳定 `--status` 入口同时对账 Desired State 目标和 rollback 目标；staging 已不存在也不能阻止判断。若 rollback 终态仍不能证明，返回 `persistence-unknown`，`project.open` 不创建 Session。
+
+## 阶段 C Runtime Manager
+
+Runtime Manager 只接收管理员预登记的 Linux x86_64 runtime artifact。项目 Desired State 的 runtime 项固定版本、target、size、SHA-256、package name、绝对 executable 的相对布局、protocol、driver、认证策略和兼容范围；项目不能提供 URL、curl|sh 或安装脚本。安装过程沿用 Stage B 的临时目录、非 root、safeTree、probe、原子 current、旧版保留、rollback 和稳定 status 对账。
+
+Runtime 仅按需同步：没有 Codex/Claude/Grok/ACP requirement 就不安装任何外部 Agent。远端渠道启动通过 `RuntimeManager.resolveExecutable()` 获取已验证的绝对路径，缺少 manager、runtime 不兼容、未安装或认证状态不满足时结构化拒绝，不回退到 PATH。
+
+认证方法以官方能力为准：
+
+- [OpenAI Codex CLI 登录说明](https://help.openai.com/en/articles/11096431) 与 [Codex app-server](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md)：远端用户完成官方登录；app-server 的 approvals/sandbox profile 由 policy 映射。
+- [Claude Code authentication](https://code.claude.com/docs/en/authentication)、[permissions](https://code.claude.com/docs/en/permissions) 和 [sandboxing](https://code.claude.com/docs/en/sandboxing)：支持官方账户/API/企业提示，不复制登录目录。
+- [Grok CLI reference](https://docs.x.ai/build/cli/reference)、[headless scripting](https://docs.x.ai/build/cli/headless-scripting) 和 [permissions](https://docs.x.ai/build/features/permissions)：支持 device-auth/API；设备码 challenge 只保留脱敏公开 URL/设备码。
+- [ACP](https://agentclientprotocol.com/)：认证和能力由具体 driver 协商，未知组合 fail closed。
+
+Runtime 状态包括 `not-required`、`missing`、`installing`、`auth-required`、`ready`、`installed-auth-unverified`、`update-required`、`incompatible`、`degraded`。无可靠且不计费的认证探测时，安装后是 `installed-auth-unverified`，不能宣称 `ready`；challenge 过期转为 `auth-required`。认证秘密只留远端用户/driver 进程内，绝不读写或复制 `~/.codex`、`~/.claude`、`~/.grok`、Cookie、OAuth token 或 API key。
+
+`ChannelExecutionPolicy` 从目标 Session 继承三档权限：只有 `danger-full-access` 可以使用 bypass/always-approve/sandbox-off；`workspace-write` 的人工审批留在目标子会话，渠道不支持的组合在启动前返回 `unsupported-permission-policy`，DSH 外层 sandbox 仍是受限模式的安全边界。
 
 ## SessionControlPort module
 

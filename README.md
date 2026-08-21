@@ -1,6 +1,6 @@
 # dsh-remote-control
 
-DSH 远程项目阶段 A/B：本机 Remote Control Connector、Linux x86_64 Remote Host stdio bridge、受信 bootstrap、版本化插件/Skill Desired State 同步、远端 operation/revision 对账，以及独立本机 Model Gateway 的 SSH 反向隧道接线。
+DSH 远程项目阶段 A/B/C：本机 Remote Control Connector、Linux x86_64 Remote Host stdio bridge、受信 bootstrap、版本化插件/Skill/Runtime Desired State 同步、外部 Agent Runtime Manager、远端 operation/revision 对账，以及独立本机 Model Gateway 的 SSH 反向隧道接线。
 
 本仓库是公开的跨主机控制面仓库：<https://github.com/gyyxs88/dsh-remote-control>。
 
@@ -20,7 +20,7 @@ DSH 远程项目阶段 A/B：本机 Remote Control Connector、Linux x86_64 Remo
 - 受信 artifact 的 SHA-256/尺寸校验、固定目标校验、无 root、临时目录和版本目录原子切换基础。
 - 独立 `ModelGateway` 进程边界：只绑定 `127.0.0.1`，按 Host 签发短期 token，模型名必须在本机 provider 目录中，绝不向远端发送底层密钥。
 - SSH stdio bridge 和 SSH reverse tunnel 的严格 Host Key 参数构造；要求固定 `known_hosts` 和指纹/公钥 pin，禁止自动接受未知 key、`curl | sh` 和公网 reverse bind。
-- Stage A Runtime Manager 只有接口和显式 `missing`/`needs-attention` 结果，不安装 Codex、Claude Code、Grok Build 或 ACP。
+- Stage C Runtime Manager 只接受管理员预登记的固定 artifact；不执行供应商安装脚本、不调用真实 provider，也不把第三方登录目录带过边界。
 
 ## 阶段 B 已交付
 
@@ -30,6 +30,15 @@ DSH 远程项目阶段 A/B：本机 Remote Control Connector、Linux x86_64 Remo
 - 插件自带 Skill 由插件 manifest 绑定版本；项目 Skill 仍以独立 Desired State 项同步。凭据、Session JSONL/SQLite、operation 状态、日志、缓存和本机插件状态不进入同步。
 - `project.open` 必须携带与 Desired State 绑定的已完成同步回执；`partial`、`incompatible`、`needs-attention` 和 `persistence-unknown` 不会静默创建 Session，并在 project/reconcile 摘要中保留。多 action 中后续 action 确定失败时，已切换 action 按逆序 rollback；回执记录 rollback `completed`/`failed`/`unknown`，未知 rollback 终态只报告 `persistence-unknown`。
 - `dsh-session-control` 包含正式的 `dsh.remote` manifest 与 socket `ping` 返回的机读 capability/version 元数据，继续只负责单 Host 的 Workspace、Session、权限、审批和 Schedule。
+
+## 阶段 C 已交付
+
+- `RuntimeRequirement` 固定 runtime id/version/target/size/SHA-256/source/package/executable/protocol、DSH/API 兼容范围和 `requiredBy`；支持 `codex`、`claude-code`、`grok-build`、`acp/<name>` 的独立 driver/capability/auth policy。
+- Runtime Manager 复用 Stage B 的受信 catalog、非 root、临时目录、探测、原子 `current`、旧版保留/rollback 和 stable status reconcile；只安装项目实际需要的 runtime，不从 PATH 猜测，也不接受项目任意安装脚本。
+- Runtime 状态统一为 `not-required`、`missing`、`installing`、`auth-required`、`ready`、`installed-auth-unverified`、`update-required`、`incompatible`、`degraded`。没有可靠且不计费的认证探测时只报告 `installed-auth-unverified`，不伪造 `ready`。
+- 认证 challenge/status 只返回脱敏状态、公开 URL 和设备码；Codex、Claude Code、Grok headless/API、ACP driver-defined 认证都留在远端用户边界，不复制或持久化 `~/.codex`、`~/.claude`、`~/.grok`、Cookie、OAuth token 或 API key。
+- `dsh-subagent-code-agents` 每个渠道 manifest 暴露 `dsh.remote.runtime`，启动从 Runtime Manager 获取绝对 executable。`ChannelExecutionPolicy` 继承目标 Session 三档权限：只有 Full Access 可用 bypass/always-approve/sandbox-off；Workspace Write 保留目标子会话审批，渠道无法兑现的组合启动前结构化拒绝。
+- 多 runtime 部分失败按逆序恢复旧版本；Session Control 仅在 runtime 同步、权限和认证前置条件均可证明成功后调用，回执绑定 desired digest、runtime identity 和 rollback 事实。
 
 ## 安装与运行
 
@@ -70,10 +79,11 @@ node bin/dsh-model-gateway.mjs --port 0
 npm run check
 npm run test:stage-a
 npm run test:stage-b
+npm run test:stage-c
 npm run pack:check
 ```
 
-测试使用 fake transport、fake session-control、临时文件、真实 `.tgz` 归档和本地 fake HTTP provider，不启动真实远端主机、不调用付费模型、不读取或测试任何真实密钥。阶段 A 证据见 [`docs/stage-a-acceptance.md`](docs/stage-a-acceptance.md)，阶段 B 证据见 [`docs/stage-b-acceptance.md`](docs/stage-b-acceptance.md)；两份记录都明确区分 fake/integration 代码验收与尚未授权的真实 Linux SSH 部署验收。
+测试使用 fake transport、fake session-control、临时文件、真实 `.tgz` 归档、fake runtime/artifact/auth output 和本地 fake HTTP provider，不启动真实远端主机、不调用付费模型、不读取或测试任何真实密钥。阶段 A/B/C 证据见 [`docs/stage-a-acceptance.md`](docs/stage-a-acceptance.md)、[`docs/stage-b-acceptance.md`](docs/stage-b-acceptance.md) 和 [`docs/stage-c-acceptance.md`](docs/stage-c-acceptance.md)；记录明确区分 fake/integration 代码验收与尚未授权的真实 Linux SSH 部署验收。
 
 ## 安全和恢复底线
 
@@ -87,7 +97,7 @@ npm run pack:check
 
 ## 后续阶段
 
-Codex/Claude/Grok/ACP 受信驱动与认证引导属于阶段 C；更完整的长任务恢复、诊断和实机平台扩展属于阶段 D。本仓库不会为了阶段 A/B 预装这些外部 Agent。
+更完整的长任务恢复、诊断和实机平台扩展属于阶段 D。本仓库不会为了阶段 C 预装所有外部 Agent，也不会在没有受信 artifact 时虚构供应商自动安装。
 
 ## License
 

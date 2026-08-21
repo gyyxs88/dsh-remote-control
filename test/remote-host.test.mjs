@@ -60,13 +60,13 @@ test('remote host refuses to start without a ready official Session Control port
   await assert.rejects(() => RemoteHostDaemon.create({ sessionControl: new SessionControlPort() }), (error) => error.code === 'SESSION_CONTROL_REQUIRED');
 });
 
-test('Stage A does not install external runtimes and marks the project needs attention', async () => {
+test('remote host refuses an external runtime without a verified runtime sync receipt', async () => {
   const daemon = await setup();
   await daemon.handle(createClientHello({ sourceHostId: 'local', sourceSessionId: 'controller' }));
-  const request = createOperationEnvelope({ type: 'project.open', idempotencyKey: 'needs-runtime', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: daemon.hostState.host.hostId, body: { absolutePath: '/srv/project', desiredState: { ...desired, runtimes: [{ id: 'codex', version: '1.0.0' }] } } });
+  const request = createOperationEnvelope({ type: 'project.open', idempotencyKey: 'needs-runtime', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: daemon.hostState.host.hostId, body: { absolutePath: '/srv/project', desiredState: { ...desired, runtimes: [{ id: 'codex', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'codex.tgz' }, sha256: 'a'.repeat(64), size: 10, target: 'linux-x86_64', packageName: 'dsh-runtime-codex', executablePath: 'bin/codex', protocolVersion: '1.0', driver: 'codex', authPolicy: 'remote-user', capabilities: ['headless'], compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.6' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:test'] }] } } });
   const response = await daemon.handle(request);
   assert.equal(response.operation.state, 'needs-attention');
-  assert.equal(response.operation.error.code, 'RUNTIME_REQUIREMENT_UNSATISFIED');
+  assert.equal(response.operation.error.code, 'RUNTIME_SYNC_NEEDS_ATTENTION');
 });
 
 test('host restart converts in-flight operations to needs-attention', async () => {

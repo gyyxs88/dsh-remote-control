@@ -1,4 +1,4 @@
-# 阶段 A/B 协议契约
+# 阶段 A/B/C 协议契约
 
 协议名称为 `dsh-remote-control`，当前版本 `1.0`。兼容规则是同一 major 才能握手，minor 取双方较小值；major 不同直接拒绝。所有 JSON frame 都是一条独立消息，stdio bridge 外层可带 `{ "id": string, "message": object }`。
 
@@ -46,7 +46,7 @@ operation 状态为：`pending`、`running`、`completed`、`partial`、`failed`
 
 ## Desired State 与可信 registry
 
-`desiredState` 的插件和 Skill 项必须是以下版本化结构；没有摘要或没有 `TrustedArtifactRegistry` 精确 allowlist 项时拒绝：
+`desiredState` 的插件、Skill 和 Runtime 项必须是以下版本化结构；没有摘要或没有 `TrustedArtifactRegistry` 精确 allowlist 项时拒绝：
 
 ```json
 {
@@ -65,13 +65,37 @@ operation 状态为：`pending`、`running`、`completed`、`partial`、`failed`
 
 `placement` 只能是 `control`、`remote` 或 `both`。同步器只解析 `remote`/`both`；control-only 项不上传。Skill 的 `bundledWith` 必须指向同版本插件，并由插件 remote manifest 的 Skill 摘要覆盖；没有 `bundledWith` 的项目 Skill 单独安装。`source` 只是受信 registry 身份，不是允许项目提交并执行的 URL、Shell 或 npm 安装脚本。
 
+Runtime requirement 额外固定 driver、认证策略、可执行相对路径和协议能力：
+
+```json
+{
+  "id": "codex",
+  "version": "0.1.0",
+  "placement": "remote",
+  "source": { "registry": "dsh-runtime-public", "artifact": "codex-0.1.0-linux-x86_64.tgz" },
+  "sha256": "64 个小写十六进制字符",
+  "size": 123456,
+  "target": "linux-x86_64",
+  "packageName": "dsh-runtime-codex",
+  "executablePath": "bin/codex",
+  "protocolVersion": "1.0",
+  "driver": "codex",
+  "authPolicy": "remote-user",
+  "capabilities": ["exec", "app-server", "read-only", "workspace-write", "danger-full-access"],
+  "compatibility": { "dsh": { "min": "0.1.0-rc.6", "max": "0.1.0-rc.6" }, "api": { "min": "1.0", "max": "1.0" } },
+  "requiredBy": ["project:default"]
+}
+```
+
+Runtime registry 必须同时证明 artifact 的文件名、版本、target、size、SHA-256、package manifest、`dsh.remote.runtime` 身份、executable layout 和 protocol 一致；缺摘要、未知 runtime、版本/API 不兼容或可执行路径逃逸均拒绝。普通项目只能声明 allowlist 中的 runtime，不能提供安装脚本或供应商下载 URL。
+
 registry 对本机固定文件做 regular-file、大小、SHA-256、tar entry、package identity、DSH/API manifest 和 lifecycle script 校验。远端安装入口固定为已部署版本中的 `dsh-remote-artifact-installer.mjs`，只在临时目录解包、探测后原子切换 `current`，旧的已验证版本和正在使用的版本不删除。
 
 ## Project Open
 
 `body.absolutePath` 必须是远端 Linux 的 POSIX 绝对路径，禁止 traversal；`desiredState` 至少包含 DSH/API 版本、插件/Skill/Runtime 数组、初始权限和 `local-gateway-required` 或 `remote-autonomous` 路由。
 
-有 remote/both requirement 时，`body.pluginSync` 必须包含 `desiredStateSha256`、每项的 verified result 和 `status: completed`。缺少同步器、allowlist 拒绝、兼容性错误、部分成功或终态未知都会创建 `needs-attention` operation，不调用 Session Control；Connector 的 `project.open` response 与后续 `state.reconcile` 会返回该同步状态。成功回执只能覆盖每个远端 requirement，不能伪造 control-only 项的安装。
+有 remote/both requirement 时，`body.pluginSync` 和有 runtime requirement 时的 `body.runtimeSync` 必须包含 `desiredStateSha256`、每项绑定的 verified result 和 `status: completed`。缺少同步器、allowlist 拒绝、兼容性错误、部分成功或终态未知都会创建 `needs-attention` operation，不调用 Session Control；Connector 的 `project.open` response 与后续 `state.reconcile` 会返回该同步状态。成功回执只能覆盖每个远端 requirement，不能伪造 control-only 项的安装。
 
 同步回执还包含 rollback 事实：
 
@@ -103,7 +127,15 @@ registry 对本机固定文件做 regular-file、大小、SHA-256、tar entry、
 
 Remote Host 先检查 allowed root 和 Runtime Manager，再通过 `SessionControlPort.openProject()` 调用目标 Host 的正式 `dsh-session-control` 服务。该 port 负责按既有语义创建/复用目录、Workspace、Session、权限和 Schedule；返回的 `workspaceId`/`sessionId` 才能写入本仓库的 Project 摘要。Partial 成功原样保留，不删除用户目录、Git 数据或已经创建的会话。
 
-阶段 A Runtime Manager 对非空 runtime requirement 返回 `missing`，不会安装外部 Agent；只有空 runtime 集合可直接完成原生 DSH Agent 项目。
+### Runtime 状态与认证 challenge
+
+Runtime Manager 只返回以下状态：`not-required`、`missing`、`installing`、`auth-required`、`ready`、`installed-auth-unverified`、`update-required`、`incompatible`、`degraded`。没有可靠且不计费的认证探测时，安装/探测成功只能是 `installed-auth-unverified`；首次真实调用若发现未认证，必须转为 `auth-required`，不能伪造 `ready`。
+
+`runtime.status` 和 `runtime.auth.challenge` 必须绑定 host handshake 的来源/目标身份与 runtime requirement。challenge 只允许返回 `runtimeId/version/state/methods`、公开登录 URL、设备码和过期时间，不返回或持久化 API key、OAuth token、Cookie、环境变量全文或认证目录。Codex 使用官方登录引导；Claude Code 返回官方账户/API/企业认证提示；Grok 支持官方 headless device-auth/API 方式；ACP 由 driver 定义认证协议。challenge 过期后状态回到 `auth-required`。
+
+### ChannelExecutionPolicy
+
+外部 Agent 启动请求携带从目标 Session 继承的 `ChannelExecutionPolicy`：`read-only`、`workspace-write` 或 `danger-full-access`，以及匹配的 `target-session`/`full-access-controller` owner、workspace root 和审批模式。只有 Full Access 可使用 bypass、always-approve 或 sandbox-off；Workspace Write 必须把人工审批留在目标子会话，Read Only 只能使用渠道正式只读能力。渠道无法兑现目标组合时在 spawn 前返回 `unsupported-permission-policy`；能力提示不是安全边界，DSH 外层沙箱仍是受限模式兜底。
 
 ## Reconcile
 
@@ -113,6 +145,8 @@ Connector 保存 `hostId`、`incarnationId` 和最后确认 revision，但不写
 - 远端 revision 更高：更新本机只读缓存；
 - 远端 revision 更低：返回 `accepted=false`，不覆盖本机已确认事实；
 - incarnation 变化：`needs-attention`，要求显式重新采纳，禁止盲目重建。
+
+Reconcile 必须同时读取 Desired State 目标 runtime identity 和本轮 rollback target；不能因为 staging 已清理而丢失判断能力。runtime sync 的回执与 desired digest、source/target host、每项 version/SHA-256/executable identity 绑定；rollback 未知时只能报告 `persistence-unknown`/`needs-attention`。
 
 ## Gateway
 

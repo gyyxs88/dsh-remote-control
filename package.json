@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-control",
-  "version": "0.1.0",
+  "version": "0.1.13",
   "description": "DSH remote project control, trusted Desired State/runtime sync and Model Gateway bridge",
   "type": "module",
   "engines": {
@@ -10,6 +10,7 @@
     "dsh-remote-host": "bin/dsh-remote-host.mjs",
     "dsh-model-gateway": "bin/dsh-model-gateway.mjs",
     "dsh-remote-host-installer": "bin/dsh-remote-host-installer.mjs",
+    "dsh-remote-dsh-installer": "bin/dsh-remote-dsh-installer.mjs",
     "dsh-remote-artifact-installer": "bin/dsh-remote-artifact-installer.mjs"
   },
   "exports": {
@@ -21,6 +22,8 @@
     "./gateway": "./lib/gateway.mjs",
     "./ssh": "./lib/ssh.mjs",
     "./bootstrap": "./lib/bootstrap.mjs",
+    "./dsh-host-bootstrap": "./lib/dsh-host-bootstrap.mjs",
+    "./dsh-http-client": "./lib/dsh-http-client.mjs",
     "./desired-state": "./lib/desired-state.mjs",
     "./runtime-requirement": "./lib/runtime-requirement.mjs",
     "./desired-state-registry": "./lib/desired-state-registry.mjs",

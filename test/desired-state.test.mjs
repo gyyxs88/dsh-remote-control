@@ -47,6 +47,29 @@ test('Desired State is versioned and only remote/both requirements are eligible 
   assert.deepEqual(state.plugins[1].requiredBy, ['project:test']);
 });
 
+test('plugin and bundled Skill may share the same id and version while same-kind duplicates remain forbidden', () => {
+  const shared = requirement({ id: 'dsh-session-control', sourceArtifact: 'dsh-session-control-0.6.0.tgz', sha256: 'a'.repeat(64) });
+  const state = validateDesiredState({
+    dshVersion: DSH,
+    apiVersion: API,
+    plugins: [shared],
+    skills: [{ ...shared, bundledWith: { pluginId: shared.id, pluginVersion: shared.version } }],
+    runtimes: [],
+    defaultPermission: 'workspace-write',
+    modelRoute: 'local-gateway-required',
+  });
+  assert.equal(state.plugins[0].id, state.skills[0].id);
+  assert.throws(() => validateDesiredState({
+    dshVersion: DSH,
+    apiVersion: API,
+    plugins: [shared, shared],
+    skills: [],
+    runtimes: [],
+    defaultPermission: 'workspace-write',
+    modelRoute: 'local-gateway-required',
+  }), ProtocolError);
+});
+
 test('missing digest, unsafe requirement and incompatible ranges fail closed', () => {
   assert.throws(() => validatePluginRequirement({ ...requirement({ sourceArtifact: 'x.tgz', sha256: undefined }), sha256: undefined }), ProtocolError);
   assert.throws(() => validatePluginRequirement({ ...requirement({ sourceArtifact: 'x.tgz', sha256: 'a'.repeat(64) }), placement: 'anywhere' }), ProtocolError);

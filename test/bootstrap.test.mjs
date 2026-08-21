@@ -1,11 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createArtifactManifest, verifyTrustedArtifact, buildBootstrapPlan, ArtifactBootstrapper, sha256File } from '../lib/bootstrap.mjs';
 import { DshRemoteError, TransportError } from '../lib/errors.mjs';
+
+test('cold bootstrap installer has no package-relative imports', async () => {
+  const installerPath = fileURLToPath(new URL('../bin/dsh-remote-host-installer.mjs', import.meta.url));
+  const source = await readFile(installerPath, 'utf8');
+  assert.doesNotMatch(source, /from\s+['"]\.\.\//u);
+  assert.match(source, /startsWith\('#!\/usr\/bin\/env node\\r\\n'\)/u);
+  assert.match(source, /await chmod\(entryPath, 0o700\)/u);
+});
 
 test('trusted artifact bootstrap verifies digest and uses atomic no-root argv', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-remote-bootstrap-'));

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPABILITIES, createClientHello, createOperationEnvelope, negotiateVersion, validateGatewayBinding, validatePermissionSnapshot, validateProjectOpenBody } from '../lib/protocol.mjs';
+import { CAPABILITIES, createClientHello, createOperationEnvelope, negotiateVersion, validateGatewayBinding, validatePermissionSnapshot, validateProjectOpenBody, validateScheduleDeleteBody } from '../lib/protocol.mjs';
 import { ProtocolError } from '../lib/errors.mjs';
 
 test('protocol negotiation accepts same major and bounded minor', () => {
@@ -24,6 +24,11 @@ test('operation envelope binds the request hash and permission snapshot', () => 
   const envelope = createOperationEnvelope({ type: 'project.open', idempotencyKey: 'key', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: 'remote', body: { absolutePath: '/srv/project' } });
   assert.equal(envelope.bodySha256.length, 64);
   assert.equal(envelope.permissionSnapshot.preset, 'workspace-write');
+});
+
+test('schedule delete protocol binds exact target Session and schedule identities', () => {
+  assert.deepEqual(validateScheduleDeleteBody({ targetSessionId: 'session-target', scheduleId: 'schedule-1' }), { targetSessionId: 'session-target', scheduleId: 'schedule-1' });
+  assert.throws(() => validateScheduleDeleteBody({ targetSessionId: '../session', scheduleId: 'schedule-1' }), ProtocolError);
 });
 
 test('permission and gateway expiries are strict and bounded', () => {

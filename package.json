@@ -1,0 +1,37 @@
+{
+  "name": "dsh-remote-control",
+  "version": "0.1.0",
+  "description": "DSH Stage A local connector, Linux Remote Host and Model Gateway bridge",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "dsh-remote-host": "bin/dsh-remote-host.mjs",
+    "dsh-model-gateway": "bin/dsh-model-gateway.mjs",
+    "dsh-remote-host-installer": "bin/dsh-remote-host-installer.mjs"
+  },
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./protocol": "./lib/protocol.mjs",
+    "./connector": "./lib/connector.mjs",
+    "./remote-host": "./lib/remote-host.mjs",
+    "./gateway": "./lib/gateway.mjs",
+    "./ssh": "./lib/ssh.mjs",
+    "./bootstrap": "./lib/bootstrap.mjs"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "test:stage-a": "node scripts/run-tests.mjs",
+    "pack:check": "npm pack --dry-run"
+  },
+  "license": "MIT"
+}

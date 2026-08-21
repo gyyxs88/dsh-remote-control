@@ -73,6 +73,34 @@ registry 对本机固定文件做 regular-file、大小、SHA-256、tar entry、
 
 有 remote/both requirement 时，`body.pluginSync` 必须包含 `desiredStateSha256`、每项的 verified result 和 `status: completed`。缺少同步器、allowlist 拒绝、兼容性错误、部分成功或终态未知都会创建 `needs-attention` operation，不调用 Session Control；Connector 的 `project.open` response 与后续 `state.reconcile` 会返回该同步状态。成功回执只能覆盖每个远端 requirement，不能伪造 control-only 项的安装。
 
+同步回执还包含 rollback 事实：
+
+```json
+{
+  "rollback": {
+    "attempted": true,
+    "status": "completed",
+    "items": [
+      {
+        "key": "plugin:example@1.0.0",
+        "status": "completed",
+        "target": {
+          "status": "installed",
+          "version": "1.0.0",
+          "sha256": "...",
+          "size": 1234,
+          "packageName": "dsh-example",
+          "target": "linux-x86_64",
+          "protocolVersion": "1.0"
+        }
+      }
+    ]
+  }
+}
+```
+
+每个 action 在切换前记录 `previous` current receipt。后续 action 确定失败时，已可能切换的 action 按逆序调用受信 installer 的 `--rollback`；`--rollback` 只接受同 kind/id 下已存在且 manifest、版本、SHA-256、size、package、target、protocol 和 safeTree 全部有效的版本，或 `target: missing`。它只原子切换/撤销 `current`，不删除新旧 versions，不执行 lifecycle script。rollback 响应丢失后，`state.reconcile` 同时读取 Desired State 目标和 rollback 目标的稳定 `--status`；rollback `unknown` 时整体只能是 `persistence-unknown`，不能降级成普通 `partial`。
+
 Remote Host 先检查 allowed root 和 Runtime Manager，再通过 `SessionControlPort.openProject()` 调用目标 Host 的正式 `dsh-session-control` 服务。该 port 负责按既有语义创建/复用目录、Workspace、Session、权限和 Schedule；返回的 `workspaceId`/`sessionId` 才能写入本仓库的 Project 摘要。Partial 成功原样保留，不删除用户目录、Git 数据或已经创建的会话。
 
 阶段 A Runtime Manager 对非空 runtime requirement 返回 `missing`，不会安装外部 Agent；只有空 runtime 集合可直接完成原生 DSH Agent 项目。

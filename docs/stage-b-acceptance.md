@@ -11,8 +11,9 @@
 | 版本化协议 | `PluginRequirement` / `SkillRequirement` 校验 placement、固定版本、source、SHA-256、DSH/API 范围和 requiredBy；Desired State 拒绝缺摘要、重复项和非法范围。 |
 | Trusted registry | 真实 `.tgz` 归档做 regular-file、大小、SHA-256、tar entry、package identity、remote/skill manifest 和 lifecycle script 校验；未知、缺失 allowlist 和不兼容项 fail closed。 |
 | 选择性同步 | fake transport 证明只处理 `remote`/`both`，control-only 不上传；bundled Skill 不重复安装，独立 Skill 使用独立项。 |
-| 幂等与对账 | 已验证同版本复用；清理命令远端完成但响应丢失时返回 `persistence-unknown`，随后通过稳定 `--status`（不依赖 staging）对账为 `completed`。 |
-| 原子安装边界 | `dsh-remote-artifact-installer` 只接受 Linux x86_64、非 root、固定 kind/id/version/package/SHA-256、`--atomic --no-scripts`；临时解包、manifest 探测、版本目录和 `current` 原子切换，旧版本不删除。 |
+| 幂等与对账 | 已验证同版本复用；清理或 rollback 命令远端完成但响应丢失时，不重放安装，使用稳定 `--status`（不依赖 staging）同时对账 Desired State 目标与 rollback 目标。rollback 已确认完成时同步保持 `needs-attention`，未知时保持 `persistence-unknown`。 |
+| 原子安装与 rollback | `dsh-remote-artifact-installer` 只接受 Linux x86_64、非 root、固定 kind/id/version/package/SHA-256、`--atomic --no-scripts`；临时解包、manifest 探测、版本目录和 `current` 原子切换，旧版本不删除。正式 rollback 只切回 manifest/版本/SHA/package/target/protocol/safeTree 全通过的版本，或安全撤销到 missing。 |
+| 多 action 恢复 | 两个插件故障注入证明 A 旧版→新版后 B 安装失败会逆序恢复 A；A 新旧版本目录均保留，Session Control 调用数为 0；rollback 回执记录 attempted/completed/failed/unknown。 |
 | Project 接线 | `project.open` 要求 remote/both requirement 有绑定的 completed sync receipt；partial、incompatible、needs-attention、persistence-unknown 不调用 Session Control，状态在 operation/project/reconcile 中保留。 |
 | Session Control 边界 | `dsh-session-control` package 与正式 socket `ping` 提供 `dsh.remote` manifest，声明 remote placement、protocol/API、capability 和 bundled Skill digest；它仍不拥有 SSH、插件传输或跨 Host Session 存储。 |
 | 打包 smoke | `npm pack` 后临时目录真实 install/import，并检查所有 bin；session-control 额外检查 packed remote manifest import。 |
@@ -33,7 +34,9 @@ npm run pack:check
 git diff --check
 ```
 
-测试只使用临时目录、真实本地 `.tgz`、fake transport、fake Session Control 和本地 fake provider；不读取或测试任何真实密钥，不调用付费模型，不连接未授权远端。
+本轮 remote-control 验收结果：`npm run check` 通过；`npm test` 共 38 项，36 通过、2 个仅 Linux 目标跳过；`npm run pack:check` 真实 tgz install/import + 4 个 bin smoke 通过；`git diff --check` 通过。
+
+测试只使用临时目录、真实本地 `.tgz`、fake/local installer transport、fake Session Control 和本地 fake provider；不读取或测试任何真实密钥，不调用付费模型，不连接未授权远端。
 
 ## 尚未完成的实机验收
 

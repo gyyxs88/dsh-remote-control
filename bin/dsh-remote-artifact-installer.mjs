@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { installRemoteArtifact, inspectRemoteArtifact } from '../lib/remote-artifact-installer.mjs';
+import { installRemoteArtifact, inspectRemoteArtifact, rollbackRemoteArtifact } from '../lib/remote-artifact-installer.mjs';
 import { validateSafePosixPath } from '../lib/path-safety.mjs';
 
 function option(name) {
@@ -29,6 +29,21 @@ async function main() {
     return;
   }
   if (!process.argv.includes('--atomic') || !process.argv.includes('--no-scripts')) throw new Error('remote artifact installer requires --atomic and --no-scripts');
+  if (process.argv.includes('--rollback')) {
+    const target = process.argv.includes('--target-missing')
+      ? { status: 'missing' }
+      : {
+        status: 'installed',
+        version: required('target-version'),
+        sha256: required('target-sha256'),
+        size: Number(required('target-size')),
+        packageName: required('target-package-name'),
+        target: option('target') ?? 'linux-x86_64',
+        protocolVersion: option('protocol-version') ?? '1.0',
+      };
+    process.stdout.write(`${JSON.stringify(await rollbackRemoteArtifact({ kind, id, installRoot, target }))}\n`);
+    return;
+  }
   const result = await installRemoteArtifact({
     artifactPath: required('artifact'),
     kind,

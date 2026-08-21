@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile as execFileCallback } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstat, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { promisify } from 'node:util';
@@ -37,6 +37,37 @@ test('remote artifact installer uses temp extraction and atomic current switch w
     const oldManifest = await readFile(join(root, 'remote', 'plugins', 'atomic-plugin', 'versions', '1.0.0', 'manifest.json'), 'utf8');
     assert.match(oldManifest, /"version": "1\.0\.0"/u);
     assert.equal((await lstat(join(root, 'remote', 'plugins', 'atomic-plugin', 'current'))).isSymbolicLink(), true);
+    const rollbackTarget = { status: 'installed', version: v1.version, sha256: v1.sha256, size: v1.size, packageName: v1.packageName, target: 'linux-x86_64', protocolVersion: '1.0' };
+    assert.equal((await (await import('../lib/remote-artifact-installer.mjs')).rollbackRemoteArtifact({ kind: 'plugin', id: 'atomic-plugin', installRoot: join(root, 'remote'), target: rollbackTarget, linkType })).status, 'rolled-back');
+    assert.equal((await inspectRemoteArtifact({ kind: 'plugin', id: 'atomic-plugin', installRoot: join(root, 'remote') })).version, '1.0.0');
+    const revoked = await (await import('../lib/remote-artifact-installer.mjs')).rollbackRemoteArtifact({ kind: 'plugin', id: 'atomic-plugin', installRoot: join(root, 'remote'), target: { status: 'missing' }, linkType });
+    assert.equal(revoked.status, 'missing');
+    assert.equal((await inspectRemoteArtifact({ kind: 'plugin', id: 'atomic-plugin', installRoot: join(root, 'remote') })).status, 'missing');
+    assert.equal((await lstat(join(root, 'remote', 'plugins', 'atomic-plugin', 'versions', '1.1.0'))).isDirectory(), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('rollback rejects a tampered manifest and a version path that escapes the component root', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-artifact-rollback-safety-'));
+  try {
+    const v1 = await makeArtifact(root, '1.0.0');
+    const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+    const installRoot = join(root, 'remote');
+    const installer = await import('../lib/remote-artifact-installer.mjs');
+    await installer.installRemoteArtifact({ ...v1, expectedSha256: v1.sha256, kind: 'plugin', id: 'atomic-plugin', installRoot, linkType });
+    const target = { status: 'installed', version: v1.version, sha256: v1.sha256, size: v1.size, packageName: v1.packageName, target: 'linux-x86_64', protocolVersion: '1.0' };
+    const manifestPath = join(installRoot, 'plugins', 'atomic-plugin', 'versions', '1.0.0', 'manifest.json');
+    await writeFile(manifestPath, (await readFile(manifestPath, 'utf8')).replace(v1.sha256, 'd'.repeat(64)));
+    await assert.rejects(() => installer.rollbackRemoteArtifact({ kind: 'plugin', id: 'atomic-plugin', installRoot, target, linkType }), (error) => error.code === 'PLUGIN_ROLLBACK_TARGET_MISMATCH');
+
+    const escaped = join(root, 'escaped');
+    await mkdir(escaped, { recursive: true });
+    const versionPath = join(installRoot, 'plugins', 'atomic-plugin', 'versions', '1.0.0');
+    await rm(versionPath, { recursive: true, force: true });
+    await symlink(escaped, versionPath, linkType);
+    await assert.rejects(() => installer.rollbackRemoteArtifact({ kind: 'plugin', id: 'atomic-plugin', installRoot, target, linkType }), (error) => error.code === 'PLUGIN_INSTALL_ROOT_ESCAPE');
   } finally {
     await rm(root, { recursive: true, force: true });
   }

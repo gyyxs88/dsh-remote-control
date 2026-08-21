@@ -26,9 +26,9 @@ DSH 远程项目阶段 A/B：本机 Remote Control Connector、Linux x86_64 Remo
 
 - `PluginRequirement` / `SkillRequirement` 使用版本化 Desired State，固定 `placement`、版本、受信来源、SHA-256、DSH/API 兼容范围和 `requiredBy`。
 - `TrustedArtifactRegistry` 是唯一产物入口；未知插件、缺摘要、版本/API 不兼容、manifest 不匹配和生命周期安装脚本均 fail closed。项目插件不能提交任意远端安装命令。
-- 同步器只选 `remote`/`both`，对真实 `.tgz` 做文件、归档、package manifest 和 SHA-256 校验；远端使用临时目录、探测、版本保留和 `current` 原子切换，已验证旧版本不被删除。
+- 同步器只选 `remote`/`both`，对真实 `.tgz` 做文件、归档、package manifest 和 SHA-256 校验；远端使用临时目录、探测、版本保留和 `current` 原子切换，已验证旧版本不被删除。正式 rollback API/CLI 只切换到 manifest、版本、摘要、package、target、protocol 和 safeTree 均通过的旧版本，也支持安全撤销到 `missing`，不删除任何版本。
 - 插件自带 Skill 由插件 manifest 绑定版本；项目 Skill 仍以独立 Desired State 项同步。凭据、Session JSONL/SQLite、operation 状态、日志、缓存和本机插件状态不进入同步。
-- `project.open` 必须携带与 Desired State 绑定的已完成同步回执；`partial`、`incompatible`、`needs-attention` 和 `persistence-unknown` 不会静默创建 Session，并在 project/reconcile 摘要中保留。
+- `project.open` 必须携带与 Desired State 绑定的已完成同步回执；`partial`、`incompatible`、`needs-attention` 和 `persistence-unknown` 不会静默创建 Session，并在 project/reconcile 摘要中保留。多 action 中后续 action 确定失败时，已切换 action 按逆序 rollback；回执记录 rollback `completed`/`failed`/`unknown`，未知 rollback 终态只报告 `persistence-unknown`。
 - `dsh-session-control` 包含正式的 `dsh.remote` manifest 与 socket `ping` 返回的机读 capability/version 元数据，继续只负责单 Host 的 Workspace、Session、权限、审批和 Schedule。
 
 ## 安装与运行
@@ -60,7 +60,7 @@ node bin/dsh-model-gateway.mjs --port 0
 
 控制面先从管理员维护的 `TrustedArtifactRegistry` 解析项目 Desired State，再通过同一受信 SSH/SFTP transport 上传产物。远端稳定入口为已安装版本中的 `current/bin/dsh-remote-artifact-installer.mjs`：它只接受固定的 kind/id/version/package/sha256，拒绝 root、路径逃逸、危险归档条目和 lifecycle script，不执行 `npm install` 或项目自带安装命令。
 
-每个插件或项目 Skill 安装到 `<remoteRoot>/{plugins,skills}/<id>/versions/<version>/package`，只通过校验后的 `current` 指针启用。响应丢失时同步器只调用稳定的 `--status` 入口对账，不依赖 staging；不能证明终态就返回 `persistence-unknown`。未配置同步器时，只要 Desired State 有远端 requirement，`project.open` 会明确进入 `needs-attention`。
+每个插件或项目 Skill 安装到 `<remoteRoot>/{plugins,skills}/<id>/versions/<version>/package`，只通过校验后的 `current` 指针启用。每个 action 开始前记录 current receipt；响应丢失或后续 action 失败时，同步器调用稳定的 `--rollback`/`--status` 入口按逆序恢复，不依赖 staging。rollback 目标已是旧版时返回 `already-current`，目标是 missing 时安全撤销 current 指针并保留 versions；不能证明恢复终态就返回 `persistence-unknown`。未配置同步器时，只要 Desired State 有远端 requirement，`project.open` 会明确进入 `needs-attention`。
 
 内置命令在没有 `--provider-module` 注入时只提供健康检查，不读取环境变量、配置文件、API Key 或登录目录，也不会调用真实模型。生产 provider/model/credential 解析由本机 DSH Gateway adapter 注入；adapter 通过进程内 token 使用路径服务 `/v1/models` 和 `/v1/generate`，token 只保留在进程内，持久状态仅保存 hash。测试使用 fake provider，绝不调用真实 provider。
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CAPABILITIES, createClientHello, createOperationEnvelope, negotiateVersion, validateGatewayBinding, validatePermissionSnapshot, validateProjectOpenBody, validateScheduleDeleteBody } from '../lib/protocol.mjs';
+import { CAPABILITIES, createClientHello, createOperationEnvelope, negotiateVersion, validateGatewayBinding, validatePermissionSnapshot, validateProjectOpenBody, validateScheduleCreateBody, validateScheduleDeleteBody } from '../lib/protocol.mjs';
 import { ProtocolError } from '../lib/errors.mjs';
 
 test('protocol negotiation accepts same major and bounded minor', () => {
@@ -29,6 +29,12 @@ test('operation envelope binds the request hash and permission snapshot', () => 
 test('schedule delete protocol binds exact target Session and schedule identities', () => {
   assert.deepEqual(validateScheduleDeleteBody({ targetSessionId: 'session-target', scheduleId: 'schedule-1' }), { targetSessionId: 'session-target', scheduleId: 'schedule-1' });
   assert.throws(() => validateScheduleDeleteBody({ targetSessionId: '../session', scheduleId: 'schedule-1' }), ProtocolError);
+});
+
+test('schedule create protocol binds target Session, prompt, and exactly one timing mode', () => {
+  assert.deepEqual(validateScheduleCreateBody({ targetSessionId: 'session-target', schedule: { prompt: 'check', every_seconds: 600 } }), { targetSessionId: 'session-target', schedule: { prompt: 'check', every_seconds: 600 } });
+  assert.throws(() => validateScheduleCreateBody({ targetSessionId: 'session-target', schedule: { prompt: 'bad', after_seconds: 1, every_seconds: 600 } }), /exactly one timing mode/);
+  assert.throws(() => validateScheduleCreateBody({ targetSessionId: 'session-target', schedule: { prompt: 'bad', every_seconds: 60 } }), /every_seconds/);
 });
 
 test('permission and gateway expiries are strict and bounded', () => {

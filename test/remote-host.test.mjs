@@ -50,6 +50,19 @@ test('remote host exposes idempotent schedule deletion through the Connector and
   assert.equal(port.calls.filter((call) => call.kind === 'schedule.delete').length, 1);
 });
 
+test('remote host exposes idempotent schedule creation through the Connector and official port', async () => {
+  const port = new FakeSessionControlPort();
+  const daemon = await RemoteHostDaemon.create({ sessionControl: port, hostId: 'remote', allowedRoot: '/srv' });
+  const connector = new RemoteControlConnector({ transport: new FakeTransport(daemon), sourceHostId: 'local', sourceSessionId: 'controller' });
+  await connector.connect();
+  const first = await connector.createSchedule({ targetSessionId: 'session-target', schedule: { prompt: 'check', every_seconds: 600 }, idempotencyKey: 'schedule-create-key' });
+  const second = await connector.createSchedule({ targetSessionId: 'session-target', schedule: { prompt: 'check', every_seconds: 600 }, idempotencyKey: 'schedule-create-key' });
+  assert.equal(first.state, 'completed');
+  assert.equal(second.operationId, first.operationId);
+  assert.equal(first.result.schedule.prompt, 'check');
+  assert.equal(port.calls.filter((call) => call.kind === 'schedule.create').length, 1);
+});
+
 test('schedule deletion retries the same operation after an unknown Session Control response', async () => {
   let calls = 0;
   const sessionControl = {

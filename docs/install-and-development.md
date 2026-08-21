@@ -12,7 +12,17 @@ npm run test:stage-c
 npm run pack:check
 ```
 
-仓库没有运行时依赖。Windows 开发机上的测试不假设本机能启动 Linux Remote Host；Remote Host 入口会在非 Linux x86_64 上 fail closed。正式远端使用打包后的固定版本，并由本机 Connector 通过 SSH 上传经过 SHA-256 校验的 artifact。
+核心 Remote Host 入口没有第三方运行时依赖；DSH 控制端插件使用当前 DSH 提供的 `@deepseek-ai/dsh-tools`、Schemastery 和同 profile 的 `dsh-session-control` peer。Windows 开发机上的测试不假设本机能启动 Linux Remote Host；Remote Host 入口会在非 Linux x86_64 上 fail closed。正式远端使用打包后的固定版本，并由本机 Connector 通过 SSH 上传经过 SHA-256 校验的 artifact。
+
+## 控制端自然语言入口
+
+1. `dsh-remote-control/plugin` 只向 `controllerSessionIds` 显式列出的普通控制会话挂载 `remote_*` 工具，同时注册 bundled `dsh-remote-project` Skill；配置为空时 fail closed。
+2. 主机登记持久化到 owner-only `remote-hosts.json` 和每 Host 独立 `known_hosts`。只保存 SSH 别名、公开 Host Key、目录和服务身份；不保存私钥、密码、Gateway token、Cookie 或供应商凭据。同一 stateDir 只允许一个 DSH 进程持锁。
+3. `remote_host_probe` 使用固定 argv 的 `ssh -G` 与 `ssh-keyscan`，返回公开候选指纹但不建立信任。只有 `remote_host_add` 收到用户已核对的精确 OpenSSH SHA-256 指纹后，才写入 managed pin 并以 BatchMode 探测非 root Linux x86_64/Node 24。
+4. `remote_project_open` 首次使用时从本机已安装的受信包生成 Remote Host 和 `dsh-session-control` `.tgz`，从精确 DSH `package-lock.json` 生成 recipe；`npm pack --ignore-scripts`、摘要和 manifest 校验后才进入现有 bootstrap/sync 链路。默认从当前 DSH 根和 peer package 解析，也可用 `dshRecipeRoot` / `sessionControlPackageRoot` 显式固定。
+5. 用户给出的项目路径必须是绝对 POSIX 路径并位于 Host 的 `allowedRoot`；路径不存在时由正式 Session Control project API 创建。变更允许根使用 `remote_host_update`，应选择能覆盖用户明确目录的最窄范围，不设为 `/`。
+6. `danger-full-access` 控制器可自主执行；`workspace-write` 的登记、更新、项目、Schedule 等变更通过 DSH `tools/pre-execute` 留在当前控制会话审批。relay 消息不能触发远程工具。
+7. 超时和断线时复用原幂等键并使用 `remote_project_reconcile`；Host/Session/Schedule 的 operation 和 revision 仍由远端正式服务判定，Skill 不自证成功。
 
 ## 远端 Host 接入
 
@@ -74,7 +84,7 @@ remoteProjectSocket: /run/user/1000/dsh-session-control.sock
 remoteProjectHostId: remote-host-01
 ```
 
-socket bridge 接受机读 ping、project.open、schedule-delete、runtime-auth 与 execution-policy 正式帧，串行转发到官方 API，并绑定 Host/source/target；不创建第二份 Session 存储。
+socket bridge 接受机读 ping、project.open、schedule-create/delete、runtime-auth 与 execution-policy 正式帧，串行转发到官方 API，并绑定 Host/source/target；不创建第二份 Session 存储。
 
 ## 不做的事
 

@@ -52,13 +52,22 @@ test('bootstrap fails closed without a catalog and reconciles an unknown termina
     const noCatalog = new ArtifactBootstrapper({ transport: { async upload() {}, async execArgv() { return { stdout: '', stderr: '', code: 0 }; } } });
     await assert.rejects(() => noCatalog.bootstrap({ filePath: artifact, version: '0.1.0', remoteRoot: '/home/test/.dsh-remote' }), (error) => error.code === 'ARTIFACT_NOT_TRUSTED');
     let calls = 0;
+    let stagingRemoved = false;
+    let reconcileArgv;
     const bootstrapper = new ArtifactBootstrapper({ trustedCatalog, transport: {
       async upload() {},
       async execArgv(argv) {
         calls += 1;
-        if (calls === 3) throw new TransportError('response lost');
-        if (argv.includes('--status')) return { stdout: JSON.stringify({ status: 'installed', version: '0.1.0', sha256: manifest.sha256 }), stderr: '', code: 0 };
+        if (argv.includes('--status')) {
+          reconcileArgv = argv;
+          return { stdout: JSON.stringify({ status: 'installed', version: '0.1.0', sha256: manifest.sha256 }), stderr: '', code: 0 };
+        }
+        if (argv[0] === 'rm') {
+          stagingRemoved = true;
+          throw new TransportError('response lost after remote cleanup completed');
+        }
         if (argv[0] === 'sha256sum') return { stdout: `${installerSha256}  ${argv[1]}\n`, stderr: '', code: 0 };
+        if (argv.includes('--probe')) return { stdout: JSON.stringify({ status: 'ok', component: 'dsh-remote-host', platform: 'linux', arch: 'x64' }), stderr: '', code: 0 };
         return { stdout: '', stderr: '', code: 0 };
       },
     } });
@@ -66,6 +75,9 @@ test('bootstrap fails closed without a catalog and reconciles an unknown termina
     const operationId = [...bootstrapper.statuses.keys()][0];
     assert.equal(bootstrapper.status(operationId).status, 'needs-attention');
     assert.equal((await bootstrapper.reconcile(bootstrapper.status(operationId).plan)).status, 'completed');
+    assert.equal(stagingRemoved, true);
+    assert.equal(reconcileArgv[1], bootstrapper.status(operationId).plan.installedInstallerPath);
+    assert.equal(reconcileArgv[1].includes('/staging/'), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

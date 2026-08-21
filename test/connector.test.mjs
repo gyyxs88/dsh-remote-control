@@ -1,4 +1,7 @@
 import test from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import assert from 'node:assert/strict';
 import { RemoteHostDaemon } from '../lib/remote-host.mjs';
 import { FakeSessionControlPort } from '../lib/session-control-port.mjs';
@@ -6,8 +9,26 @@ import { FakeTransport, MemoryConnectorCache, RemoteControlConnector } from '../
 import { NeedsAttentionError, TransportError } from '../lib/errors.mjs';
 import { createInitialHostState, MemoryStateStore } from '../lib/state-store.mjs';
 import { ModelGateway } from '../lib/gateway.mjs';
+import { createRemoteProjectSourceRegistration } from '../lib/connector-identity.mjs';
 
 const desiredState = { dshVersion: '0.1.0-rc.6', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' };
+
+test('connector identity is persistent and produces the exact Session Control allowlist entry', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-connector-identity-'));
+  try {
+    const daemon = await RemoteHostDaemon.create({ sessionControl: new FakeSessionControlPort(), hostId: 'remote-host' });
+    const file = path.join(root, 'identity.json');
+    const first = await RemoteControlConnector.create({ transport: new FakeTransport(daemon), identityFile: file });
+    const second = await RemoteControlConnector.create({ transport: new FakeTransport(daemon), identityFile: file });
+    assert.equal(second.sourceHostId, first.sourceHostId);
+    assert.equal(second.sourceSessionId, first.sourceSessionId);
+    assert.throws(() => createRemoteProjectSourceRegistration({ schemaVersion: '1.0', sourceHostId: first.sourceHostId, sourceSessionId: first.sourceSessionId }), /controller Session identity is invalid/);
+    assert.deepEqual(createRemoteProjectSourceRegistration({ schemaVersion: '1.0', sourceHostId: first.sourceHostId, sourceSessionId: first.sourceSessionId }, { controllerSessionId: 'remote-live-controller' }), { sourceHostId: first.sourceHostId, sourceSessionId: first.sourceSessionId, controllerSessionId: 'remote-live-controller' });
+    assert.throws(() => new RemoteControlConnector({ transport: new FakeTransport(daemon) }), /persistent source identity/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test('connector reconciles a response lost after remote operation completed', async () => {
   const daemon = await RemoteHostDaemon.create({ sessionControl: new FakeSessionControlPort() });

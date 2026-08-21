@@ -2,8 +2,9 @@
 import { pathToFileURL } from 'node:url';
 import { homedir } from 'node:os';
 import { RemoteHostDaemon } from '../lib/remote-host.mjs';
-import { InstalledRuntimeManager } from '../lib/runtime-manager.mjs';
+import { InstalledRuntimeManager, createBoundedAuthRunner } from '../lib/runtime-manager.mjs';
 import { UnixSocketSessionControlPort } from '../lib/session-control-port.mjs';
+import { startRuntimeManagerService } from '../lib/runtime-manager-service.mjs';
 import { MAX_FRAME_BYTES } from '../lib/protocol.mjs';
 
 const MAX_PENDING_FRAMES = 64;
@@ -40,14 +41,25 @@ async function main() {
   const dataDir = options['data-dir'] || `${homedir()}/.dsh-remote/state`;
   const sessionControl = await loadSessionControl(options['session-control-module'], options['session-control-socket'], options['host-id'] || 'remote-host');
   const runtimeRoot = options['runtime-root'] || `${homedir()}/.dsh-remote`;
-  const daemon = await RemoteHostDaemon.create({ dataDir, sessionControl, runtimeManager: new InstalledRuntimeManager({ installRoot: runtimeRoot }), allowedRoot: options['allowed-root'] || null, hostId: options['host-id'] || undefined });
-  process.on('SIGTERM', () => void daemon.close().then(() => process.exit(0)));
-  process.on('SIGINT', () => void daemon.close().then(() => process.exit(0)));
-  if (options.bridge === true || options.stdio === true) return runBridge(daemon);
+  const daemon = await RemoteHostDaemon.create({ dataDir, sessionControl, runtimeManager: new InstalledRuntimeManager({ installRoot: runtimeRoot, authRunner: createBoundedAuthRunner() }), allowedRoot: options['allowed-root'] || null, hostId: options['host-id'] || undefined });
+  let runtimeService = null;
+  if (options['runtime-manager-socket']) {
+    const tokenFile = options['runtime-manager-token-file'] || `${runtimeRoot}/runtime-manager.token`;
+    runtimeService = await startRuntimeManagerService({ daemon, socketPath: options['runtime-manager-socket'], hostId: options['host-id'] || daemon.hostState.host.hostId, capabilityTokenFile: tokenFile });
+  }
+  let shuttingDown = false;
+  const shutdown = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    void Promise.allSettled([runtimeService?.close(), daemon.close()]).then(() => process.exit(0));
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+  if (options.bridge === true || options.stdio === true) return runBridge(daemon, shutdown);
   throw new Error('use: dsh-remote-host bridge --stdio --data-dir <path>');
 }
 
-async function runBridge(daemon) {
+async function runBridge(daemon, shutdown) {
   let buffer = '';
   let processing = false;
   const seenIds = new Set();
@@ -58,7 +70,7 @@ async function runBridge(daemon) {
     if ((!buffer.includes('\n') && bufferedBytes > MAX_FRAME_BYTES) || bufferedBytes > MAX_FRAME_BYTES * MAX_PENDING_FRAMES) return rejectOversized();
     void consume();
   });
-  process.stdin.on('end', () => process.exitCode = 0);
+  process.stdin.on('end', () => { process.exitCode = 0; shutdown(); });
 
   async function consume() {
     if (processing) return;

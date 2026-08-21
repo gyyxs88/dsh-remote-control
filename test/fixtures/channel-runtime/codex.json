@@ -1,0 +1,20 @@
+{
+  "name": "@dsh-subagent-code-agents/channel-codex",
+  "dsh": {
+    "remote": {
+      "channelRuntime": {
+        "schemaVersion": "1.0",
+        "runtimeId": "codex",
+        "placement": "remote",
+        "protocolVersion": "1.0",
+        "driver": "codex",
+        "authPolicy": "remote-user",
+        "capabilities": ["exec", "app-server", "approval-requests"],
+        "compatibility": {
+          "dsh": { "min": "0.1.0-rc.6", "max": "0.1.0-rc.6" },
+          "api": { "min": "1.0", "max": "1.0" }
+        }
+      }
+    }
+  }
+}

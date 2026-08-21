@@ -34,7 +34,7 @@ Runtime Manager 只接收管理员预登记的 Linux x86_64 runtime artifact。�
 
 Runtime 仅按需同步：没有 Codex/Claude/Grok/ACP requirement 就不安装任何外部 Agent。远端渠道启动通过 `RuntimeManager.resolveExecutable()` 获取已验证的绝对路径，缺少 manager、runtime 不兼容、未安装或认证状态不满足时结构化拒绝，不回退到 PATH。
 
-认证方法以官方能力为准：
+认证方法以官方能力为准。固定 argv 启动后，公开 URL/设备码会在进程结束前通过 `runtime.auth.challenge` 返回；随后用 `runtime.auth.status` 查询完成/失败/过期，或用 `runtime.auth.cancel` 取消。Remote Host 不把完整 stdout 写入日志，不接受调用方提交的 output，不重复启动同一 exact runtime 的活动 challenge：
 
 - [OpenAI Codex CLI 登录说明](https://help.openai.com/en/articles/11096431) 与 [Codex app-server](https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md)：远端用户完成官方登录；app-server 的 approvals/sandbox profile 由 policy 映射。
 - [Claude Code authentication](https://code.claude.com/docs/en/authentication)、[permissions](https://code.claude.com/docs/en/permissions) 和 [sandboxing](https://code.claude.com/docs/en/sandboxing)：支持官方账户/API/企业提示，不复制登录目录。

@@ -13,7 +13,7 @@ const { UnixSocketRuntimeManager } = configuredSubagentRoot === undefined
   ? { UnixSocketRuntimeManager: undefined }
   : await import(pathToFileURL(join(configuredSubagentRoot, 'packages', 'core', 'lib', 'runtime-manager-client.js')).href);
 const token = 'A'.repeat(32);
-const requirement = { id: 'codex', version: '1.0.0', placement: 'remote', source: { registry: 'admin-catalog', artifact: 'fixture' }, target: 'linux-x86_64', protocolVersion: '1.0', size: 10, sha256: 'a'.repeat(64), packageName: 'codex-runtime', executablePath: 'bin/codex', driver: 'codex', authPolicy: 'remote-user', capabilities: ['exec'], compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.6' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['channel:codex'] };
+const requirement = { id: 'codex', version: '1.0.0', placement: 'remote', source: { registry: 'admin-catalog', artifact: 'fixture' }, target: 'linux-x86_64', protocolVersion: '1.0', size: 10, sha256: 'a'.repeat(64), packageName: 'codex-runtime', executablePath: 'bin/codex', driver: 'codex', authPolicy: 'remote-user', capabilities: ['exec'], compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.8' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['channel:codex'] };
 
 function daemonFixture() {
   const daemon = {

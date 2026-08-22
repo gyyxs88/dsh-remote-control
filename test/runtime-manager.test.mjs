@@ -19,7 +19,7 @@ import { RuntimeManagerService } from '../lib/runtime-manager-service.mjs';
 const execFile = promisify(execFileCallback);
 const configuredSubagentRoot = process.env.DSH_SUBAGENT_CODE_AGENTS_ROOT;
 if (configuredSubagentRoot !== undefined && !isAbsolute(configuredSubagentRoot)) throw new Error('DSH_SUBAGENT_CODE_AGENTS_ROOT must be an absolute path');
-const DSH = '0.1.0-rc.6';
+const DSH = '0.1.0-rc.8';
 const API = '1.0';
 const COMPATIBILITY = { dsh: { min: DSH, max: DSH }, api: { min: API, max: API } };
 

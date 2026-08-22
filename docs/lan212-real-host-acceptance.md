@@ -39,6 +39,16 @@
 9. Session Control 首次返回无法证明 Workspace/Session 身份时，Remote Host 以 needs-attention 保留原 operation，并只允许同幂等请求恢复。
 10. Schedule 创建缺少 AbortSignal；正式调用加入 60 秒 signal。Schedule 删除补齐 Session Control、Remote Host operation 与 Connector 三层 API，响应未知时可同键恢复。
 11. DSH controller/target 的无模型恢复不能把 HTTP `session.prompt('/goal')` 当作客户端 slash-command 分发；改为正式 `session.rename` 解析 live Agent，不触发 LLM。
+12. rc.8 把 20 个运行时接口声明为非可选 peer；`legacy-peer-deps` 生成的旧配方未安装这些接口，并在同工作区隔离验收时被父目录 rc.6 `node_modules` 意外托底。配方现要求每个非可选 peer 都在 lock 顶层可解析，根依赖固定精确版本，五个 install script 通过 `allowScripts` 按包名和版本批准；隔离审计由 258 条缺失边收敛为 0。
+
+## rc.8 原地升级复验
+
+同一受权 Host `lan-212-skill` 已从 DSH `0.1.0-rc.6` 原子升级到 `0.1.0-rc.8`，Remote Host 从 `0.2.0` 升至 `0.2.1`，`dsh-session-control` 从 `0.6.4` 升至 `0.6.5`；systemd user service 保持 `active`，旧版本目录保留用于回退。
+
+- 项目目录 `/home/leyi/Projects/dsh-remote-skill-acceptance` 复用原 Workspace `12d653ff-65db-467c-8bb1-1eddaf835c2b`，rc.8 验收 Session 为 `session-15c346c0-80a3-42a3-8c67-7bcdcb92e0c7`。
+- 正式 Schedule `schedule-1` 创建后删除，最终 `deleted=true`；未留下待触发任务。
+- 显式重启 `dsh-remote-lan-212-skill.service` 后，同幂等请求返回相同 Workspace、Session、operation receipt，reconcile=`confirmed`、revision=`16`。
+- 全程未提交模型 prompt、未调用 provider、未执行供应商登录、未读取或复制秘密。
 
 ## 未验收边界
 

@@ -11,7 +11,7 @@ description: 用自然语言登记 SSH 主机、自动部署远端 DSH，并在�
 
 - 先调用 `remote_host_list`，用名称、SSH 别名、地址和用户描述匹配主机。只有多个候选无法可靠区分时才询问。
 - 未登记主机先调用 `remote_host_probe`。首次 Host Key 不能静默信任：把返回的指纹交给用户通过可信渠道核对；用户确认精确指纹后再调用 `remote_host_add`。
-- `remote_host_add` 只登记本机信任和连接信息；第一次 `remote_project_open` 会自动检查并安装受信版本的 DSH、Remote Host 和会话控制插件。
+- `remote_host_add` 只登记本机信任和连接信息；第一次 `remote_project_open` 会自动检查并安装受信目录锁定的 DSH、Remote Host 和会话控制插件，不自行改用目录外版本。
 - 私钥、密码、token、Cookie 和供应商登录目录都不进入主机登记。SSH 必须已经能以 BatchMode 使用本机现有认证。
 
 ## 打开目录

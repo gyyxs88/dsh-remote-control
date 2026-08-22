@@ -13,7 +13,7 @@ test('client hello and project body are versioned and constrained', () => {
   assert.equal(hello.type, CAPABILITIES.HOST_HELLO);
   const body = validateProjectOpenBody({
     absolutePath: '/srv/project',
-    desiredState: { dshVersion: '0.1.0-rc.8', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' },
+    desiredState: { dshVersion: '0.1.1-rc.2', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' },
   });
   assert.equal(body.absolutePath, '/srv/project');
   assert.throws(() => validateProjectOpenBody({ absolutePath: 'relative', desiredState: body.desiredState }), ProtocolError);

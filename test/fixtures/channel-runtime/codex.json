@@ -11,7 +11,7 @@
         "authPolicy": "remote-user",
         "capabilities": ["exec", "app-server", "approval-requests"],
         "compatibility": {
-          "dsh": { "min": "0.1.0-rc.6", "max": "0.1.0-rc.8" },
+          "dsh": { "min": "0.1.0-rc.6", "max": "0.1.1-rc.2" },
           "api": { "min": "1.0", "max": "1.0" }
         }
       }

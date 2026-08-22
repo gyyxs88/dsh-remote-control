@@ -11,7 +11,7 @@ import { TrustedArtifactRegistry } from '../lib/desired-state-registry.mjs';
 import { DshRemoteError, ProtocolError } from '../lib/errors.mjs';
 
 const execFile = promisify(execFileCallback);
-const DSH = '0.1.0-rc.8';
+const DSH = '0.1.1-rc.2';
 const API = '1.0';
 
 async function makeTgz(root, { name = 'dsh-test-plugin', version = '1.0.0', id = 'test-plugin', skill = false, lifecycle = false } = {}) {

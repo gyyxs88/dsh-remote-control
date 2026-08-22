@@ -60,7 +60,7 @@ operation 状态为：`pending`、`running`、`completed`、`partial`、`failed`
   "source": { "registry": "dsh-public", "artifact": "dsh-session-control-0.6.0.tgz" },
   "sha256": "64 个小写十六进制字符",
   "compatibility": {
-    "dsh": { "min": "0.1.0-rc.6", "max": "0.1.0-rc.8" },
+    "dsh": { "min": "0.1.0-rc.6", "max": "0.1.1-rc.2" },
     "api": { "min": "1.0", "max": "1.0" }
   },
   "requiredBy": ["project:default"]
@@ -86,7 +86,7 @@ Runtime requirement 额外固定 driver、认证策略、可执行相对路径�
   "driver": "codex",
   "authPolicy": "remote-user",
   "capabilities": ["exec", "app-server", "read-only", "workspace-write", "danger-full-access"],
-  "compatibility": { "dsh": { "min": "0.1.0-rc.6", "max": "0.1.0-rc.8" }, "api": { "min": "1.0", "max": "1.0" } },
+  "compatibility": { "dsh": { "min": "0.1.0-rc.6", "max": "0.1.1-rc.2" }, "api": { "min": "1.0", "max": "1.0" } },
   "requiredBy": ["project:default"]
 }
 ```

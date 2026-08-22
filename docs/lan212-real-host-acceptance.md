@@ -56,3 +56,9 @@
 - 未执行真实供应商登录、认证过期、真实模型生成或付费请求，也未读取、复制或提交任何秘密。
 - 本轮仅覆盖 Linux x86_64 + systemd user service；Linux ARM64、macOS、Windows OpenSSH 和无 systemd 保活仍属于后续平台扩展。
 - 未配置 GitHub-hosted 或第三方 CI；发布依据是本机全套测试、真实 pack smoke、LAN 实机证据和 GitHub PR 检查。
+
+## DSH 0.1.1-rc.2 原地升级复验
+
+同一受权 Host `lan-212-skill` 已继续原子升级到 DSH `0.1.1-rc.2`、Remote Host `0.2.2` 与 `dsh-session-control 0.6.6`。项目复用 Workspace `12d653ff-65db-467c-8bb1-1eddaf835c2b`，验收 Session 为 `session-42553ecc-6c4a-4fba-9125-ff6f3c7911e8`；Schedule `schedule-1` 创建后删除。
+
+显式重启 `dsh-remote-lan-212-skill.service` 后，同一 project/create/delete 幂等键返回原 Workspace、Session 与 operation，reconcile=`confirmed`、revision=`24`，没有重复副作用。详细依赖、隔离 Host 和三仓验证证据见 [`dsh-0.1.1-rc.2-acceptance.md`](dsh-0.1.1-rc.2-acceptance.md)。

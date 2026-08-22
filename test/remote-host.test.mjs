@@ -9,7 +9,7 @@ import { createClientHello, createOperationEnvelope, sha256 } from '../lib/proto
 import { validateDesiredState } from '../lib/desired-state.mjs';
 import { DshRemoteError } from '../lib/errors.mjs';
 
-const desired = { dshVersion: '0.1.0-rc.6', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' };
+const desired = { dshVersion: '0.1.0-rc.8', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' };
 const projectIdempotencyBody = ({ absolutePath, desiredState, targetSessionId, runtimeAuthTickets, displayName, schedule }) => ({
   absolutePath,
   desiredState: validateDesiredState(desiredState),
@@ -116,7 +116,7 @@ test('project.open persists verified plugin sync status and reconcile returns it
   await daemon.handle(createClientHello({ sourceHostId: 'local', sourceSessionId: 'controller' }));
   const desiredWithPlugin = {
     ...desired,
-    plugins: [{ id: 'remote-plugin', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'remote-plugin.tgz' }, sha256: 'a'.repeat(64), compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.6' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:remote'] }],
+    plugins: [{ id: 'remote-plugin', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'remote-plugin.tgz' }, sha256: 'a'.repeat(64), compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.8' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:remote'] }],
   };
   const normalized = validateDesiredState(desiredWithPlugin);
   const request = createOperationEnvelope({ type: 'project.open', operationId: 'plugin-open-001', idempotencyKey: 'plugin-open-key', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: hostId, body: { absolutePath: '/srv/plugin-project', desiredState: desiredWithPlugin, pluginSync: { status: 'completed', desiredStateSha256: sha256(normalized), items: [{ key: 'plugin:remote-plugin@1.0.0', status: 'installed', version: '1.0.0', sha256: 'a'.repeat(64) }] } }, idempotencyBody: projectIdempotencyBody({ absolutePath: '/srv/plugin-project', desiredState: desiredWithPlugin }) });
@@ -132,7 +132,7 @@ test('project.open refuses remote requirements without a verified synchronizer r
   const daemon = await setup();
   const connector = new RemoteControlConnector({ transport: new FakeTransport(daemon), sourceHostId: 'local', sourceSessionId: 'controller' });
   await connector.connect();
-  const response = await connector.openProject({ absolutePath: '/srv/un-synced', desiredState: { ...desired, plugins: [{ id: 'remote-plugin', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'remote-plugin.tgz' }, sha256: 'a'.repeat(64), compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.6' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:remote'] }] } });
+  const response = await connector.openProject({ absolutePath: '/srv/un-synced', desiredState: { ...desired, plugins: [{ id: 'remote-plugin', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'remote-plugin.tgz' }, sha256: 'a'.repeat(64), compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.8' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:remote'] }] } });
   assert.equal(response.state, 'needs-attention');
   assert.equal(response.error.code, 'PLUGIN_SYNC_NEEDS_ATTENTION');
   assert.equal(daemon.hostState.projects && Object.keys(daemon.hostState.projects).length, 0);
@@ -145,7 +145,7 @@ test('remote host refuses to start without a ready official Session Control port
 test('remote host refuses an external runtime without a verified runtime sync receipt', async () => {
   const daemon = await setup();
   await daemon.handle(createClientHello({ sourceHostId: 'local', sourceSessionId: 'controller' }));
-  const needsRuntimeState = { ...desired, runtimes: [{ id: 'codex', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'codex.tgz' }, sha256: 'a'.repeat(64), size: 10, target: 'linux-x86_64', packageName: 'dsh-runtime-codex', executablePath: 'bin/codex', protocolVersion: '1.0', driver: 'codex', authPolicy: 'remote-user', capabilities: ['headless'], compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.6' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:test'] }] };
+  const needsRuntimeState = { ...desired, runtimes: [{ id: 'codex', version: '1.0.0', placement: 'remote', source: { registry: 'trusted', artifact: 'codex.tgz' }, sha256: 'a'.repeat(64), size: 10, target: 'linux-x86_64', packageName: 'dsh-runtime-codex', executablePath: 'bin/codex', protocolVersion: '1.0', driver: 'codex', authPolicy: 'remote-user', capabilities: ['headless'], compatibility: { dsh: { min: '0.1.0-rc.6', max: '0.1.0-rc.8' }, api: { min: '1.0', max: '1.0' } }, requiredBy: ['project:test'] }] };
   const request = createOperationEnvelope({ type: 'project.open', idempotencyKey: 'needs-runtime', sourceHostId: 'local', sourceSessionId: 'controller', targetHostId: daemon.hostState.host.hostId, body: { absolutePath: '/srv/project', desiredState: needsRuntimeState }, idempotencyBody: projectIdempotencyBody({ absolutePath: '/srv/project', desiredState: needsRuntimeState }) });
   const response = await daemon.handle(request);
   assert.equal(response.operation.state, 'needs-attention');

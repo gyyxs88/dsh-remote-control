@@ -11,7 +11,7 @@
         "authPolicy": "driver-defined",
         "capabilities": ["headless", "agent-sdk", "approval-callback"],
         "compatibility": {
-          "dsh": { "min": "0.1.0-rc.6", "max": "0.1.0-rc.6" },
+          "dsh": { "min": "0.1.0-rc.6", "max": "0.1.0-rc.8" },
           "api": { "min": "1.0", "max": "1.0" }
         }
       }

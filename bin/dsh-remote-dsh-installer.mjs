@@ -12,10 +12,10 @@ const SESSION_ID = /^session-[A-Za-z0-9-]{8,128}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const PORTABLE_PATH = /^\/[A-Za-z0-9._/-]+$/u;
 const TRUSTED_INSTALL_SCRIPTS = new Map([
-  ['node_modules/@deepseek-ai/dsh-subprocess-local', '0.1.0-rc.6'],
+  ['node_modules/@deepseek-ai/dsh-subprocess-local', '0.1.0-rc.8'],
   ['node_modules/@google/genai', '1.52.0'],
-  ['node_modules/koffi', '3.1.5'],
-  ['node_modules/node-pty', '1.1.0'],
+  ['node_modules/koffi', '3.1.6'],
+  ['node_modules/node-pty', '1.2.0-beta.15'],
   ['node_modules/protobufjs', '7.6.5'],
 ]);
 
@@ -99,16 +99,31 @@ function safeRecipeEntries(output) {
 }
 
 function validateLockedRecipe(packageJson, packageLock, version) {
-  if (packageJson?.private !== true || packageJson?.dependencies?.['@deepseek-ai/dsh'] !== version || Object.keys(packageJson.dependencies ?? {}).length !== 1) fail('DSH recipe package.json must contain only the exact DSH dependency', 'DSH_RECIPE_INVALID');
-  if (packageLock?.lockfileVersion !== 3 || packageLock?.packages?.['']?.dependencies?.['@deepseek-ai/dsh'] !== version || packageLock?.packages?.['node_modules/@deepseek-ai/dsh']?.version !== version) fail('DSH recipe lock does not bind the requested DSH version', 'DSH_RECIPE_INVALID');
+  const dependencies = packageJson?.dependencies ?? {};
+  const dependencyNames = Object.keys(dependencies).sort();
+  const lockedRoot = packageLock?.packages?.['']?.dependencies ?? {};
+  const lockedNames = Object.keys(lockedRoot).sort();
+  if (packageJson?.private !== true || dependencies['@deepseek-ai/dsh'] !== version || dependencyNames.length === 0 || dependencyNames.some((name) => !VERSION.test(dependencies[name] ?? ''))) fail('DSH recipe dependencies must be exact and bind the requested DSH version', 'DSH_RECIPE_INVALID');
+  if (packageLock?.lockfileVersion !== 3 || JSON.stringify(dependencyNames) !== JSON.stringify(lockedNames) || dependencyNames.some((name) => lockedRoot[name] !== dependencies[name])) fail('DSH recipe lock root does not match package.json', 'DSH_RECIPE_INVALID');
+  for (const name of dependencyNames) {
+    if (packageLock.packages?.[`node_modules/${name}`]?.version !== dependencies[name]) fail(`DSH recipe lock does not bind exact root dependency ${name}`, 'DSH_RECIPE_INVALID');
+  }
   for (const [packagePath, value] of Object.entries(packageLock.packages ?? {})) {
     const topLevel = packagePath.slice('node_modules/'.length);
     if (packagePath.startsWith('node_modules/@deepseek-ai/dsh') && !topLevel.includes('/node_modules/') && value?.version !== version) fail(`DSH recipe contains a drifting DSH package: ${packagePath}`, 'DSH_RECIPE_DRIFT');
+    for (const peer of Object.keys(value?.peerDependencies ?? {})) {
+      if (value?.peerDependenciesMeta?.[peer]?.optional === true) continue;
+      if (!VERSION.test(packageLock.packages?.[`node_modules/${peer}`]?.version ?? '')) fail(`DSH recipe is missing top-level peer closure ${peer} required by ${packagePath}`, 'DSH_RECIPE_PEER_CLOSURE_INVALID');
+    }
     if (value?.hasInstallScript === true && TRUSTED_INSTALL_SCRIPTS.get(packagePath) !== value.version) fail(`DSH recipe contains an unapproved lifecycle script: ${packagePath}`, 'DSH_RECIPE_LIFECYCLE_NOT_TRUSTED');
   }
   const actualInstallScripts = Object.entries(packageLock.packages ?? {}).filter(([, value]) => value?.hasInstallScript === true).map(([packagePath]) => packagePath).sort();
   const expectedInstallScripts = [...TRUSTED_INSTALL_SCRIPTS.keys()].sort();
   if (actualInstallScripts.length !== expectedInstallScripts.length || actualInstallScripts.some((value, index) => value !== expectedInstallScripts[index])) fail('DSH recipe lifecycle allowlist is incomplete or has drifted', 'DSH_RECIPE_LIFECYCLE_NOT_TRUSTED');
+  const approvedScripts = packageJson?.allowScripts ?? {};
+  const expectedApprovals = [...TRUSTED_INSTALL_SCRIPTS].map(([packagePath, scriptVersion]) => `${packagePath.slice('node_modules/'.length)}@${scriptVersion}`).sort();
+  const actualApprovals = Object.entries(approvedScripts).filter(([, approved]) => approved === true).map(([identity]) => identity).sort();
+  if (Object.keys(approvedScripts).length !== actualApprovals.length || actualApprovals.length !== expectedApprovals.length || actualApprovals.some((value, index) => value !== expectedApprovals[index])) fail('DSH recipe lifecycle approvals are incomplete or have drifted', 'DSH_RECIPE_LIFECYCLE_NOT_TRUSTED');
 }
 
 function probeDshInstall(packageRoot, version) {
@@ -257,7 +272,7 @@ async function install() {
       const packageJson = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'));
       const packageLock = JSON.parse(await readFile(join(packageRoot, 'package-lock.json'), 'utf8'));
       validateLockedRecipe(packageJson, packageLock, version);
-      command('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund'], {
+      command('npm', ['ci', '--omit=dev', '--legacy-peer-deps', '--no-audit', '--no-fund'], {
         cwd: packageRoot,
         env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' },
       });

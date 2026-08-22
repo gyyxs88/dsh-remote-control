@@ -11,7 +11,7 @@ import { createInitialHostState, MemoryStateStore } from '../lib/state-store.mjs
 import { ModelGateway } from '../lib/gateway.mjs';
 import { createRemoteProjectSourceRegistration } from '../lib/connector-identity.mjs';
 
-const desiredState = { dshVersion: '0.1.0-rc.6', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' };
+const desiredState = { dshVersion: '0.1.0-rc.8', plugins: [], skills: [], runtimes: [], defaultPermission: 'workspace-write', modelRoute: 'local-gateway-required' };
 
 test('connector identity is persistent and produces the exact Session Control allowlist entry', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-connector-identity-'));

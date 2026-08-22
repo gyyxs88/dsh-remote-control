@@ -22,6 +22,7 @@
 - 正式 `schedule.create` 创建 `schedule-1`，随后正式 `schedule.delete` 删除；没有通过项目重开或直接改存储模拟。
 - 远端 systemd user service 重启后用同一 rc.8 幂等请求再次执行，返回相同 Host、Workspace、Session 和 operation receipt；对账 revision 为 `16`，没有重复项目或 Schedule。
 - 全程没有提交模型 prompt、调用真实 provider、触发登录或读取凭据；本次验收只证明远端部署、控制、调度和恢复链路。
+- 已继续升级并验收 DSH `0.1.1-rc.2`、Remote Host `0.2.2`、Session Control `0.6.6`；同一目录复用 Workspace，新建 Session `session-42553ecc-6c4a-4fba-9125-ff6f3c7911e8`。Schedule 创建/删除后重启 user service，同幂等请求仍返回原标识，reconcile revision=`24`；详见 [`dsh-0.1.1-rc.2-acceptance.md`](dsh-0.1.1-rc.2-acceptance.md)。
 
 ## 仍保留的边界
 

@@ -12,7 +12,7 @@ const SESSION_ID = /^session-[A-Za-z0-9-]{8,128}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const PORTABLE_PATH = /^\/[A-Za-z0-9._/-]+$/u;
 const TRUSTED_INSTALL_SCRIPTS = new Map([
-  ['node_modules/@deepseek-ai/dsh-subprocess-local', '0.1.0-rc.8'],
+  ['node_modules/@deepseek-ai/dsh-subprocess-local', '0.1.1-rc.2'],
   ['node_modules/@google/genai', '1.52.0'],
   ['node_modules/koffi', '3.1.6'],
   ['node_modules/node-pty', '1.2.0-beta.15'],

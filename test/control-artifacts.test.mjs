@@ -29,10 +29,10 @@ test('control artifact provider packs installed trusted sources without lifecycl
   });
   const artifacts = await provider.prepare();
   assert.equal(artifacts.dshVersion, '0.1.1-rc.2');
-  assert.equal(artifacts.remoteHost.version, '0.2.3');
-  assert.equal(artifacts.sessionControl.version, '0.6.7');
+  assert.equal(artifacts.remoteHost.version, '0.2.4');
+  assert.equal(artifacts.sessionControl.version, '0.6.8');
   assert.equal(artifacts.sessionControl.pluginRequirement.sha256, artifacts.sessionControl.sha256);
-  assert.equal(artifacts.sessionControl.skillRequirement.bundledWith.pluginVersion, '0.6.7');
+  assert.equal(artifacts.sessionControl.skillRequirement.bundledWith.pluginVersion, '0.6.8');
   const resolved = await artifacts.sessionControl.registry.resolve({ kind: 'plugin', ...artifacts.sessionControl.pluginRequirement }, { dshVersion: artifacts.dshVersion, apiVersion: artifacts.apiVersion });
   assert.equal(resolved.packageJson.name, 'dsh-session-control');
 });

@@ -7,6 +7,8 @@ description: 用自然语言登记 SSH 主机、自动部署远端 DSH，并在�
 
 使用 `remote_*` 工具完成远程主机和项目操作。不要让用户输入内部 Host id、Workspace id、Session id、operation id 或部署参数；先自行发现并维护这些标识。不要用 Shell 临时拼接 SSH、SCP、安装或数据库命令绕过插件。
 
+工具可见性由部署授权决定。推荐个人 DSH 启用 `authorizeAllOrdinarySessions`，让每个普通用户会话都能直接使用本 Skill；subagent 和 `dsh-session-control` 中继轮仍不能调用远程控制工具。受管或多用户部署可继续使用显式 `controllerSessionIds`。
+
 ## 定位主机
 
 - 先调用 `remote_host_list`，用名称、SSH 别名、地址和用户描述匹配主机。只有多个候选无法可靠区分时才询问。

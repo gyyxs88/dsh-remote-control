@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-control",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "DSH remote project control, trusted Desired State/runtime sync and Model Gateway bridge",
   "type": "module",
   "engines": {
@@ -63,7 +63,7 @@
     "control": {
       "manifestVersion": "1.0",
       "pluginId": "dsh-remote-control",
-      "version": "0.2.4",
+      "version": "0.2.5",
       "placements": ["control"],
       "protocolVersion": "1.0",
       "apiVersion": "1.0",
@@ -75,7 +75,7 @@
   "peerDependencies": {
     "@deepseek-ai/schemastery": "3.18.1",
     "@deepseek-ai/dsh-tools": ">=0.1.0-rc.6",
-    "dsh-session-control": "0.6.8"
+    "dsh-session-control": "^0.6.8"
   },
   "license": "MIT"
 }

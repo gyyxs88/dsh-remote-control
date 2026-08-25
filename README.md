@@ -45,6 +45,8 @@ DSH 远程项目控制插件：内置控制端 `dsh-remote-project` Skill 和 `r
 
 本机依赖 Node.js 22 或更高版本；`dsh-session-control` 的正式 socket bridge 依赖 Node.js 24。Remote Host 正式目标是 Linux x86_64。冷启动部署要求远端已有 Node.js 24、npm、Corepack、tar、systemd user service，并为该非 root 用户启用 linger；不要求预装 DSH、pnpm、本仓库或项目插件，也不要求 root。`DshHostBootstrapper` 会自动安装并探测 DSH，再通过 loopback SSH local tunnel 创建固定 controller Session、激活正式 `dsh-session-control` profile；完成后 Remote Host 才能启动：
 
+本包接受 `dsh-session-control >=0.6.8 <0.7.0` 的兼容补丁版本，不再把 peer 精确锁死到单个 patch；真正要部署到远端的版本与 SHA-256 仍由运行时读取当前受信安装包后生成 Desired State，不会因此放宽 artifact allowlist。
+
 ### DSH 控制端插件与 Skill
 
 包内 `cordis.patch.yml` 通过 `dsh-remote-control/plugin` 加载控制端插件。受管部署可把 `controllerSessionIds` 配成与 `dsh-session-control` 相同的显式控制会话；个人 DSH 可启用 `authorizeAllOrdinarySessions`。两者都未配置时不会向任何 Session 挂载工具：

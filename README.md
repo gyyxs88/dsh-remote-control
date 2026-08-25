@@ -47,7 +47,7 @@ DSH 远程项目控制插件：内置控制端 `dsh-remote-project` Skill 和 `r
 
 ### DSH 控制端插件与 Skill
 
-包内 `cordis.patch.yml` 通过 `dsh-remote-control/plugin` 加载控制端插件。把 `controllerSessionIds` 配成与 `dsh-session-control` 相同的显式控制会话；空数组不会向任何 Session 挂载工具：
+包内 `cordis.patch.yml` 通过 `dsh-remote-control/plugin` 加载控制端插件。受管部署可把 `controllerSessionIds` 配成与 `dsh-session-control` 相同的显式控制会话；个人 DSH 可启用 `authorizeAllOrdinarySessions`。两者都未配置时不会向任何 Session 挂载工具：
 
 ```yaml
 - insert:
@@ -56,12 +56,15 @@ DSH 远程项目控制插件：内置控制端 `dsh-remote-project` Skill 和 `r
       config:
         controllerSessionIds:
           - session-your-controller
+        authorizeAllOrdinarySessions: false
         stateDir: .dsh-remote-control
         # 默认使用当前 DSH 安装根中的 package.json/package-lock.json。
         dshRecipeRoot: D:/path/to/dsh-install
         # 与控制插件安装在同一 profile 时可自动解析；开发环境可显式填写。
         sessionControlPackageRoot: D:/path/to/dsh-session-control
 ```
+
+`authorizeAllOrdinarySessions: true` 只扩展到普通用户会话：subagent 不会获得远程工具，来自 `dsh-session-control` 的 relay 轮即使运行在已授权会话中也会被执行时门禁拒绝。修改主机、远程项目或定时任务仍按当前会话的原生权限预设执行 Workspace Write 审批或 Full Access 自主授权。
 
 插件注册 `remote_host_list/probe/add/update/remove/inspect`、`remote_project_open/reconcile` 和 `remote_schedule_create/delete`。bundled Skill 位于 `skills/dsh-remote-project/SKILL.md`，会自动注册为模型和用户均可调用的 Skill。用户以后可以直接说：
 

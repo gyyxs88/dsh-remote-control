@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import packageJson from '../package.json' with { type: 'json' };
-import { registerRemoteTools, REMOTE_TOOL_NAMES } from '../lib/dsh-plugin.mjs';
+import { admitRemoteController, registerRemoteTools, REMOTE_TOOL_NAMES } from '../lib/dsh-plugin.mjs';
 import { loadBundledSkill } from '../lib/skill.mjs';
 
 test('bundled Remote Project Skill is model/user invocable and digest-bound to the control manifest', async () => {
@@ -30,4 +30,16 @@ test('DSH plugin registers the complete remote tool surface and maps public argu
   assert.deepEqual(calls[1][1].schedule, { prompt: 'check', every_seconds: 600 });
   dispose();
   assert.equal(definitions.size, 0);
+});
+
+test('all-ordinary remote admission excludes subagents and remembers normal sessions', () => {
+  const authorized = new Set(['explicit-controller']);
+  const ctx = { agents: { get: () => undefined, isOwnedBy: () => false } };
+  const ordinary = { id: 'ordinary', session: { header: { cwd: '/workspace' } } };
+  const subagent = { id: 'subagent', session: { header: { cwd: '/workspace', origin: 'subagent' } } };
+  assert.equal(admitRemoteController(ctx, ordinary, authorized, false), false);
+  assert.equal(admitRemoteController(ctx, ordinary, authorized, true), true);
+  assert.equal(authorized.has('ordinary'), true);
+  assert.equal(admitRemoteController(ctx, subagent, authorized, true), false);
+  assert.equal(authorized.has('subagent'), false);
 });

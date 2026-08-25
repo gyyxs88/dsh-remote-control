@@ -5,4 +5,5 @@
       name: 'dsh-remote-control/plugin'
       config:
         controllerSessionIds: []
+        authorizeAllOrdinarySessions: false
         stateDir: '.dsh-remote-control'

@@ -19,7 +19,7 @@ import { RuntimeManagerService } from '../lib/runtime-manager-service.mjs';
 const execFile = promisify(execFileCallback);
 const configuredSubagentRoot = process.env.DSH_SUBAGENT_CODE_AGENTS_ROOT;
 if (configuredSubagentRoot !== undefined && !isAbsolute(configuredSubagentRoot)) throw new Error('DSH_SUBAGENT_CODE_AGENTS_ROOT must be an absolute path');
-const DSH = '0.1.1-rc.2';
+const DSH = '0.1.2-rc.1';
 const API = '1.0';
 const COMPATIBILITY = { dsh: { min: DSH, max: DSH }, api: { min: API, max: API } };
 
@@ -166,7 +166,10 @@ test('managed auth returns a public device challenge before process exit and sup
     await timeoutManager.close();
 
     const marker = join(root, 'must-not-run-after-close');
-    const closeDriver = { ...fakeDriver, authCommand: ['-e', `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'late'), 500)`] };
+    const closeDriver = {
+      ...fakeDriver,
+      authCommand: ['-e', `process.stdout.write('https://auth.openai.com/device Device code: CLOSE-1234\\n'); setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'late'), 500)`],
+    };
     const closingManager = new InstalledRuntimeManager({ installRoot: root, transport: { execArgv: async () => ({ stdout: JSON.stringify(status), stderr: '', code: 0 }) }, authRunner: createBoundedAuthRunner(), drivers: { codex: closeDriver } });
     await closingManager.authChallenge(req, { timeoutMs: 5_000 });
     await closingManager.close();

@@ -12,7 +12,7 @@ const installerPath = fileURLToPath(new URL('../bin/dsh-remote-dsh-installer.mjs
 function profileInput() {
   return {
     profileName: 'web',
-    dshVersion: '0.1.1-rc.2',
+    dshVersion: '0.1.2-rc.1',
     plugins: [{ id: 'dsh-session-control', packageName: 'dsh-session-control', version: '0.6.6', sha256: 'a'.repeat(64), packagePath: '/home/test/.dsh-remote/plugins/dsh-session-control/versions/0.6.6/package' }],
     sessionControl: {
       controllerSessionId: 'session-12345678-abcd',
@@ -25,9 +25,9 @@ function profileInput() {
   };
 }
 
-test('DSH 0.1.1-rc.2 installer pins lifecycle approval and requires an explicit peer closure', async () => {
+test('DSH 0.1.2-rc.1 installer pins lifecycle approval and requires an explicit peer closure', async () => {
   const source = await readFile(installerPath, 'utf8');
-  assert.match(source, /dsh-subprocess-local', '0\.1\.1-rc\.2'/u);
+  assert.match(source, /dsh-subprocess-local', dshVersion/u);
   assert.match(source, /koffi', '3\.1\.6'/u);
   assert.match(source, /node-pty', '1\.2\.0-beta\.15'/u);
   assert.match(source, /DSH_RECIPE_PEER_CLOSURE_INVALID/u);
@@ -39,7 +39,7 @@ test('DSH 0.1.1-rc.2 installer pins lifecycle approval and requires an explicit 
 test('DSH cold-host bootstrap uploads a trusted locked recipe and returns an exact receipt', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dsh-host-bootstrap-'));
   try {
-    const recipePath = join(root, 'dsh-0.1.1-rc.2-lock.tgz');
+    const recipePath = join(root, 'dsh-0.1.2-rc.1-lock.tgz');
     await writeFile(recipePath, 'locked-recipe');
     const recipeInfo = await stat(recipePath);
     const recipeSha256 = await sha256File(recipePath);
@@ -50,17 +50,17 @@ test('DSH cold-host bootstrap uploads a trusted locked recipe and returns an exa
       async execArgv(argv) {
         calls.push(['exec', ...argv]);
         if (argv[0] === 'sha256sum') return { stdout: `${installerSha256}  ${argv[1]}\n` };
-        if (argv.includes('--recipe')) return { stdout: JSON.stringify({ status: 'installed', version: '0.1.1-rc.2', pnpmVersion: '11.19.0', serviceName: 'dsh-remote-test.service', port: 3181 }) };
+        if (argv.includes('--recipe')) return { stdout: JSON.stringify({ status: 'installed', version: '0.1.2-rc.1', pnpmVersion: '11.19.0', serviceName: 'dsh-remote-test.service', port: 3181 }) };
         return { stdout: '' };
       },
     };
     const bootstrapper = new DshHostBootstrapper({
       transport,
-      trustedCatalog: { '0.1.1-rc.2': { version: '0.1.1-rc.2', name: 'dsh-0.1.1-rc.2-lock.tgz', sha256: recipeSha256, size: recipeInfo.size, pnpmVersion: '11.19.0', installerSha256 } },
+      trustedCatalog: { '0.1.2-rc.1': { version: '0.1.2-rc.1', name: 'dsh-0.1.2-rc.1-lock.tgz', sha256: recipeSha256, size: recipeInfo.size, pnpmVersion: '11.19.0', installerSha256 } },
     });
-    const result = await bootstrapper.install({ recipePath, version: '0.1.1-rc.2', pnpmVersion: '11.19.0', remoteRoot: '/home/test/.dsh-remote', dshHome: '/home/test/.dsh-remote/dsh-home', profileName: 'web', hostId: 'test-host', serviceName: 'dsh-remote-test.service', port: 3181, operationId: 'bootstrap-operation-1' });
+    const result = await bootstrapper.install({ recipePath, version: '0.1.2-rc.1', pnpmVersion: '11.19.0', remoteRoot: '/home/test/.dsh-remote', dshHome: '/home/test/.dsh-remote/dsh-home', profileName: 'web', hostId: 'test-host', serviceName: 'dsh-remote-test.service', port: 3181, operationId: 'bootstrap-operation-1' });
     assert.equal(result.status, 'completed');
-    assert.equal(result.result.version, '0.1.1-rc.2');
+    assert.equal(result.result.version, '0.1.2-rc.1');
     assert.equal(calls.filter((call) => call[0] === 'upload').length, 2);
     assert.ok(calls.some((call) => call.includes('--pnpm-version') && call.includes('11.19.0')));
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -94,7 +94,7 @@ test('DSH profile activation uploads only the generated config and trusted insta
         if (argv.includes('--configure')) return { stdout: JSON.stringify({ status: 'configured', sha256, serviceName: 'dsh-remote-test.service', port: 3181 }) };
         return { stdout: '' };
       },
-    }, trustedCatalog: { '0.1.1-rc.2': { installerSha256 } } });
+    }, trustedCatalog: { '0.1.2-rc.1': { installerSha256 } } });
     const result = await bootstrapper.configure({ profileConfigPath, remoteRoot: '/home/test/.dsh-remote', dshHome: '/home/test/.dsh-remote/dsh-home', profileName: 'web', serviceName: 'dsh-remote-test.service', port: 3181, operationId: 'profile-operation-1' });
     assert.equal(result.status, 'completed');
     assert.equal(uploads.length, 2);

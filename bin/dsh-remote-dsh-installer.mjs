@@ -11,13 +11,19 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SESSION_ID = /^session-[A-Za-z0-9-]{8,128}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const PORTABLE_PATH = /^\/[A-Za-z0-9._/-]+$/u;
-const TRUSTED_INSTALL_SCRIPTS = new Map([
-  ['node_modules/@deepseek-ai/dsh-subprocess-local', '0.1.1-rc.2'],
+const COMMON_TRUSTED_INSTALL_SCRIPTS = Object.freeze([
   ['node_modules/@google/genai', '1.52.0'],
   ['node_modules/koffi', '3.1.6'],
   ['node_modules/node-pty', '1.2.0-beta.15'],
   ['node_modules/protobufjs', '7.6.5'],
 ]);
+
+function trustedInstallScripts(dshVersion) {
+  return new Map([
+    ['node_modules/@deepseek-ai/dsh-subprocess-local', dshVersion],
+    ...COMMON_TRUSTED_INSTALL_SCRIPTS,
+  ]);
+}
 
 function fail(message, code) {
   const error = new Error(message);
@@ -99,6 +105,7 @@ function safeRecipeEntries(output) {
 }
 
 function validateLockedRecipe(packageJson, packageLock, version) {
+  const trustedScripts = trustedInstallScripts(version);
   const dependencies = packageJson?.dependencies ?? {};
   const dependencyNames = Object.keys(dependencies).sort();
   const lockedRoot = packageLock?.packages?.['']?.dependencies ?? {};
@@ -115,13 +122,13 @@ function validateLockedRecipe(packageJson, packageLock, version) {
       if (value?.peerDependenciesMeta?.[peer]?.optional === true) continue;
       if (!VERSION.test(packageLock.packages?.[`node_modules/${peer}`]?.version ?? '')) fail(`DSH recipe is missing top-level peer closure ${peer} required by ${packagePath}`, 'DSH_RECIPE_PEER_CLOSURE_INVALID');
     }
-    if (value?.hasInstallScript === true && TRUSTED_INSTALL_SCRIPTS.get(packagePath) !== value.version) fail(`DSH recipe contains an unapproved lifecycle script: ${packagePath}`, 'DSH_RECIPE_LIFECYCLE_NOT_TRUSTED');
+    if (value?.hasInstallScript === true && trustedScripts.get(packagePath) !== value.version) fail(`DSH recipe contains an unapproved lifecycle script: ${packagePath}`, 'DSH_RECIPE_LIFECYCLE_NOT_TRUSTED');
   }
   const actualInstallScripts = Object.entries(packageLock.packages ?? {}).filter(([, value]) => value?.hasInstallScript === true).map(([packagePath]) => packagePath).sort();
-  const expectedInstallScripts = [...TRUSTED_INSTALL_SCRIPTS.keys()].sort();
+  const expectedInstallScripts = [...trustedScripts.keys()].sort();
   if (actualInstallScripts.length !== expectedInstallScripts.length || actualInstallScripts.some((value, index) => value !== expectedInstallScripts[index])) fail('DSH recipe lifecycle allowlist is incomplete or has drifted', 'DSH_RECIPE_LIFECYCLE_NOT_TRUSTED');
   const approvedScripts = packageJson?.allowScripts ?? {};
-  const expectedApprovals = [...TRUSTED_INSTALL_SCRIPTS].map(([packagePath, scriptVersion]) => `${packagePath.slice('node_modules/'.length)}@${scriptVersion}`).sort();
+  const expectedApprovals = [...trustedScripts].map(([packagePath, scriptVersion]) => `${packagePath.slice('node_modules/'.length)}@${scriptVersion}`).sort();
   const actualApprovals = Object.entries(approvedScripts).filter(([, approved]) => approved === true).map(([identity]) => identity).sort();
   if (Object.keys(approvedScripts).length !== actualApprovals.length || actualApprovals.length !== expectedApprovals.length || actualApprovals.some((value, index) => value !== expectedApprovals[index])) fail('DSH recipe lifecycle approvals are incomplete or have drifted', 'DSH_RECIPE_LIFECYCLE_NOT_TRUSTED');
 }

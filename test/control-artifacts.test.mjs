@@ -7,16 +7,16 @@ import test from 'node:test';
 import { ControlArtifactProvider, validateDshRecipeLock } from '../lib/control-artifacts.mjs';
 
 test('DSH recipe requires an exact top-level closure for every non-optional peer', () => {
-  const packageJson = { private: true, dependencies: { '@deepseek-ai/dsh': '0.1.2-rc.1', '@deepseek-ai/required-peer': '0.1.2-rc.1' } };
+  const packageJson = { private: true, dependencies: { '@deepseek-ai/dsh': '0.1.5-rc.2', '@deepseek-ai/required-peer': '0.1.5-rc.2' } };
   const packageLock = { lockfileVersion: 3, packages: {
     '': { dependencies: { ...packageJson.dependencies } },
-    'node_modules/@deepseek-ai/dsh': { version: '0.1.2-rc.1', peerDependencies: { '@deepseek-ai/required-peer': '^0.1.2-rc.1' } },
-    'node_modules/@deepseek-ai/required-peer': { version: '0.1.2-rc.1' },
+    'node_modules/@deepseek-ai/dsh': { version: '0.1.5-rc.2', peerDependencies: { '@deepseek-ai/required-peer': '^0.1.5-rc.2' } },
+    'node_modules/@deepseek-ai/required-peer': { version: '0.1.5-rc.2' },
   } };
-  assert.doesNotThrow(() => validateDshRecipeLock(packageJson, packageLock, '0.1.2-rc.1'));
+  assert.doesNotThrow(() => validateDshRecipeLock(packageJson, packageLock, '0.1.5-rc.2'));
   const missing = structuredClone(packageJson);
   delete missing.dependencies['@deepseek-ai/required-peer'];
-  assert.throws(() => validateDshRecipeLock(missing, packageLock, '0.1.2-rc.1'), (error) => error.code === 'CONTROL_DSH_RECIPE_INVALID' || error.code === 'CONTROL_DSH_RECIPE_PEER_CLOSURE_INVALID');
+  assert.throws(() => validateDshRecipeLock(missing, packageLock, '0.1.5-rc.2'), (error) => error.code === 'CONTROL_DSH_RECIPE_INVALID' || error.code === 'CONTROL_DSH_RECIPE_PEER_CLOSURE_INVALID');
 });
 
 test('control artifact provider packs installed trusted sources without lifecycle scripts', async () => {
@@ -28,11 +28,11 @@ test('control artifact provider packs installed trusted sources without lifecycl
     packageRoot: path.resolve('.'),
   });
   const artifacts = await provider.prepare();
-  assert.equal(artifacts.dshVersion, '0.1.2-rc.1');
-  assert.equal(artifacts.remoteHost.version, '0.3.0');
-  assert.equal(artifacts.sessionControl.version, '0.8.0');
+  assert.equal(artifacts.dshVersion, '0.1.5-rc.2');
+  assert.equal(artifacts.remoteHost.version, '0.3.1');
+  assert.equal(artifacts.sessionControl.version, '0.8.1');
   assert.equal(artifacts.sessionControl.pluginRequirement.sha256, artifacts.sessionControl.sha256);
-  assert.equal(artifacts.sessionControl.skillRequirement.bundledWith.pluginVersion, '0.8.0');
+  assert.equal(artifacts.sessionControl.skillRequirement.bundledWith.pluginVersion, '0.8.1');
   const resolved = await artifacts.sessionControl.registry.resolve({ kind: 'plugin', ...artifacts.sessionControl.pluginRequirement }, { dshVersion: artifacts.dshVersion, apiVersion: artifacts.apiVersion });
   assert.equal(resolved.packageJson.name, 'dsh-session-control');
 });

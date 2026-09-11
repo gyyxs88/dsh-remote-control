@@ -4,7 +4,7 @@ import { isAbsolute, join } from 'node:path';
 import test from 'node:test';
 import { buildDesiredState, deriveRuntimeRequirements, validateChannelRuntimeDeclaration } from '../lib/runtime-requirement.mjs';
 
-const DSH = '0.1.2-rc.1';
+const DSH = '0.1.5-rc.2';
 const API = '1.0';
 const COMPATIBILITY = { dsh: { min: DSH, max: DSH }, api: { min: API, max: API } };
 

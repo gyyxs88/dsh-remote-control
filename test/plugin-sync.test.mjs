@@ -15,7 +15,7 @@ import { FakeSessionControlPort } from '../lib/session-control-port.mjs';
 import { FakeTransport, RemoteControlConnector } from '../lib/connector.mjs';
 
 const execFile = promisify(execFileCallback);
-const DSH = '0.1.2-rc.1';
+const DSH = '0.1.5-rc.2';
 const API = '1.0';
 
 async function makePlugin(root, options = []) {

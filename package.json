@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-control",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "DSH remote project control, trusted Desired State/runtime sync and Model Gateway bridge",
   "type": "module",
   "engines": {
@@ -63,17 +63,35 @@
     "control": {
       "manifestVersion": "1.0",
       "pluginId": "dsh-remote-control",
-      "version": "0.3.0",
-      "placements": ["control"],
+      "version": "0.3.1",
+      "placements": [
+        "control"
+      ],
       "protocolVersion": "1.0",
       "apiVersion": "1.0",
-      "dshCompatibility": {"min": "0.1.0-rc.6", "max": "0.1.2-rc.1"},
-      "capabilities": ["remote.host.registry", "remote.host.bootstrap", "remote.project.open", "remote.project.reconcile", "remote.schedule.create", "remote.schedule.delete"],
-      "bundledSkills": [{"id": "dsh-remote-project", "version": "0.1.3", "sha256": "0b417b7ee305c56bc9f34aed9a541209708521cbc70bb2334c26ad7532c6aea5"}]
+      "dshCompatibility": {
+        "min": "0.1.0-rc.6",
+        "max": "0.1.5-rc.2"
+      },
+      "capabilities": [
+        "remote.host.registry",
+        "remote.host.bootstrap",
+        "remote.project.open",
+        "remote.project.reconcile",
+        "remote.schedule.create",
+        "remote.schedule.delete"
+      ],
+      "bundledSkills": [
+        {
+          "id": "dsh-remote-project",
+          "version": "0.1.3",
+          "sha256": "0b417b7ee305c56bc9f34aed9a541209708521cbc70bb2334c26ad7532c6aea5"
+        }
+      ]
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/schemastery": "3.18.1",
+    "@deepseek-ai/schemastery": "3.18.2",
     "@deepseek-ai/dsh-tools": ">=0.1.0-rc.6",
     "dsh-session-control": ">=0.8.0 <0.9.0"
   },

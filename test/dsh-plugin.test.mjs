@@ -59,6 +59,7 @@ test('rc.2 Session snapshot and native permission preset guard remote tools', ()
   assert.equal(authorizeRemoteTool(ctx, exec, next, authorized).kind, 'deny');
   assert.equal(passedSession, undefined);
   assert.equal(authorizeRemoteTool(ctx, { ...exec, agent: { ...agent, session: {} } }, next, authorized).kind, 'deny');
+  assert.equal(authorizeRemoteTool(ctx, { ...exec, agent: { ...agent, session: { events: [{ type: 'turn/start' }] } } }, next, authorized).kind, 'deny');
   events[1] = { type: 'user/message', data: { source: { kind: 'user' } } };
   assert.equal(authorizeRemoteTool(ctx, exec, next, authorized).kind, 'ask');
   assert.equal(passedSession, session);

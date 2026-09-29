@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import packageJson from '../package.json' with { type: 'json' };
-import { admitRemoteController, registerRemoteTools, REMOTE_TOOL_NAMES } from '../lib/dsh-plugin.mjs';
+import { admitRemoteController, authorizeRemoteTool, currentTurnIsRelay, registerRemoteTools, REMOTE_TOOL_NAMES } from '../lib/dsh-plugin.mjs';
 import { loadBundledSkill } from '../lib/skill.mjs';
 
 test('bundled Remote Project Skill is model/user invocable and digest-bound to the control manifest', async () => {
@@ -15,6 +15,8 @@ test('bundled Remote Project Skill is model/user invocable and digest-bound to t
   const source = await readFile(skill.path);
   const digest = createHash('sha256').update(source).digest('hex');
   assert.equal(packageJson.dsh.control.bundledSkills[0].sha256, digest);
+  assert.equal(packageJson.version, packageJson.dsh.control.version);
+  assert.equal(packageJson.dsh.control.dshCompatibility.max, '0.2.0-rc.2');
 });
 
 test('DSH plugin registers the complete remote tool surface and maps public arguments', async () => {
@@ -42,4 +44,24 @@ test('all-ordinary remote admission excludes subagents and remembers normal sess
   assert.equal(authorized.has('ordinary'), true);
   assert.equal(admitRemoteController(ctx, subagent, authorized, true), false);
   assert.equal(authorized.has('subagent'), false);
+});
+
+test('rc.2 Session snapshot and native permission preset guard remote tools', () => {
+  const events = [{ type: 'turn/start' }, { type: 'user/message', data: { source: { kind: 'plugin', plugin: 'dsh-session-control', form: 'relay' } } }];
+  const session = { snapshotEvents: () => events };
+  const agent = { id: 'controller', session };
+  const authorized = new Set([agent.id]);
+  let passedSession;
+  const ctx = { permissionPresets: { current(value) { passedSession = value; return 'workspace-write'; } } };
+  const next = () => ({ kind: 'allow' });
+  const exec = { name: 'remote_project_open', agent, arguments: { host_id: 'lan', path: '/srv/project' } };
+  assert.equal(currentTurnIsRelay(agent), true);
+  assert.equal(authorizeRemoteTool(ctx, exec, next, authorized).kind, 'deny');
+  assert.equal(passedSession, undefined);
+  assert.equal(authorizeRemoteTool(ctx, { ...exec, agent: { ...agent, session: {} } }, next, authorized).kind, 'deny');
+  events[1] = { type: 'user/message', data: { source: { kind: 'user' } } };
+  assert.equal(authorizeRemoteTool(ctx, exec, next, authorized).kind, 'ask');
+  assert.equal(passedSession, session);
+  ctx.permissionPresets.current = () => 'danger-full-access';
+  assert.equal(authorizeRemoteTool(ctx, exec, next, authorized).kind, 'allow');
 });

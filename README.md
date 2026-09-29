@@ -43,17 +43,17 @@ DSH 远程项目控制插件：内置控制端 `dsh-remote-project` Skill 和 `r
 
 ## 安装与运行
 
-### DSH Desktop 0.2.0-rc.2 适配边界
+### Desktop 0.2.0-rc.2 控制端
 
-截至 2026-09-29，本仓库**未验证支持**把 `dsh-remote-control` 作为 `D:\DSH` Desktop 0.2.0-rc.2 的控制端插件安装。Desktop 的内部 Web Host 默认端口是 `19387`，原 Web 的默认端口是 `3080`；两者的 `/api` 都由 Connection 承载，但 Host RPC 需要浏览器会话认证。`DshHttpClient` 当前只用于经 SSH 本地隧道访问**新部署的远端 Linux Web Host**（默认远端端口 `3181`），没有桌面 Host 的认证上下文；把 `19387` 填进远端端口或把 `3080` 替换为 `19387` 都不能使桌面实例成为 Remote Host。
+`dsh-remote-control/plugin` 按本机 Desktop profile 的控制端插件适配；Desktop 的内部 Web Host 默认端口 `19387` 不用于远端连接，也无需替换原 Web 的 `3080`。本机工具仍通过 SSH 控制单独部署的 Linux Web Host。本仓库已按 rc.2 的 Session 快照和权限预设接口调整工具门禁；Desktop profile 中实际加载、模型调用及真实远端操作仍需另行验收。[官方 Desktop 架构](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/apps/desktop/README.md)、[工具 API](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/core/tools/README.md)。
 
-远程项目链路仍依赖单独部署的非 root Linux x86_64 DSH、`dsh-session-control` 正式 Unix socket、SSH stdio bridge 和独立的 Model Gateway。当前控制端 manifest 只声明 DSH 至 `0.1.5-rc.2`，默认远端锁定版也是 `0.1.5-rc.2`；同工程的 `dsh-session-control 0.8.3` 只声明支持 `0.2.0-rc.1`。因此本次不扩大兼容范围、不改桌面 profile 或凭据、不以无认证的回环 HTTP 请求冒充 rc.2 API 验证。后续若要从 Desktop 控制远端项目，需先分别验证控制端插件在 rc.2 的 Host/工具 API、取得与 rc.2 匹配的正式 session-control 版本，并在隔离环境验证远端 Web Host 的认证和项目操作；这不要求把 Desktop 自身部署为远端服务。
+官方 rc.2 的 [Remote API](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/api/remotes/README.md) 与 [Workspace Controller](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/api/workspace-controller/README.md) 提供已连接 Host 的 RPC、工作区和 Session 操作；其文档未提供本插件所需的多 SSH 主机登记、远端 DSH/插件部署和跨主机 operation 对账流程，因此这部分控制端能力继续由本插件实现。
 
-依据：[rc.2 Desktop 架构](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/apps/desktop/README.md)、[rc.2 Connection 与认证](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/client/connection/README.md)、[rc.2 Session Controller](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/api/session-controller/README.md)。
+**远端插件版本独立于本机控制端依赖。** 默认远端 DSH 锁定为 `0.1.5-rc.2`，而本机 Desktop 所用 `dsh-session-control 0.8.4` 的 remote manifest 只支持 `0.2.0-rc.2`。首次远程项目操作会先读取 `sessionControlPackageRoot` 指向的远端插件包（未配置时解析控制端同 profile 的包），按包内 manifest 和明确钉死版本的 DSH peer 依赖核对目标远端 DSH/API；不匹配时在打包和 SSH 之前明确拒绝。要保持旧远端架构，须显式提供经过验证、remote manifest 支持 `0.1.5-rc.2` 且 peer 不钉在另一版本的远端 `dsh-session-control` 包；不会把本机 0.8.4 伪装成兼容旧远端的 Desired State。
 
 本机依赖 Node.js 22 或更高版本；`dsh-session-control` 的正式 socket bridge 依赖 Node.js 24。Remote Host 正式目标是 Linux x86_64。冷启动部署要求远端已有 Node.js 24、npm、Corepack、tar、systemd user service，并为该非 root 用户启用 linger；不要求预装 DSH、pnpm、本仓库或项目插件，也不要求 root。`DshHostBootstrapper` 会自动安装并探测 DSH，再通过 loopback SSH local tunnel 创建固定 controller Session、激活正式 `dsh-session-control` profile；完成后 Remote Host 才能启动：
 
-本包接受 `dsh-session-control >=0.8.0 <0.9.0` 的兼容版本，覆盖面向 DSH `0.1.5-rc.2` 的 `0.8.x`，不再把 peer 精确锁死到旧 minor；真正要部署到远端的版本与 SHA-256 仍由运行时读取当前受信安装包后生成 Desired State，不会因此放宽 artifact allowlist。
+本包的 `dsh-session-control >=0.8.0 <0.9.0` peer 范围仅用于本机依赖解析，**不表示任意 0.8.x 都适合旧远端**；真正要部署的远端版本与 SHA-256 从指定受信包生成，且必须通过该包的 remote manifest 兼容检查。
 
 ### DSH 控制端插件与 Skill
 
@@ -68,10 +68,10 @@ DSH 远程项目控制插件：内置控制端 `dsh-remote-project` Skill 和 `r
           - session-your-controller
         authorizeAllOrdinarySessions: false
         stateDir: .dsh-remote-control
-        # 默认使用当前 DSH 安装根中的 package.json/package-lock.json。
-        dshRecipeRoot: D:/path/to/dsh-install
-        # 与控制插件安装在同一 profile 时可自动解析；开发环境可显式填写。
-        sessionControlPackageRoot: D:/path/to/dsh-session-control
+        # Desktop 控制旧远端时，显式指定与远端锁定版一致的受信 Web lock recipe。
+        dshRecipeRoot: D:/path/to/remote-web-recipe
+        # 显式指定与远端 DSH/API 兼容的插件包；无需等于 Desktop 的 0.8.4。
+        sessionControlPackageRoot: D:/path/to/remote-compatible-session-control
 ```
 
 `authorizeAllOrdinarySessions: true` 只扩展到普通用户会话：subagent 不会获得远程工具，来自 `dsh-session-control` 的 relay 轮即使运行在已授权会话中也会被执行时门禁拒绝。修改主机、远程项目或定时任务仍按当前会话的原生权限预设执行 Workspace Write 审批或 Full Access 自主授权。

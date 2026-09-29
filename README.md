@@ -43,6 +43,14 @@ DSH 远程项目控制插件：内置控制端 `dsh-remote-project` Skill 和 `r
 
 ## 安装与运行
 
+### DSH Desktop 0.2.0-rc.2 适配边界
+
+截至 2026-09-29，本仓库**未验证支持**把 `dsh-remote-control` 作为 `D:\DSH` Desktop 0.2.0-rc.2 的控制端插件安装。Desktop 的内部 Web Host 默认端口是 `19387`，原 Web 的默认端口是 `3080`；两者的 `/api` 都由 Connection 承载，但 Host RPC 需要浏览器会话认证。`DshHttpClient` 当前只用于经 SSH 本地隧道访问**新部署的远端 Linux Web Host**（默认远端端口 `3181`），没有桌面 Host 的认证上下文；把 `19387` 填进远端端口或把 `3080` 替换为 `19387` 都不能使桌面实例成为 Remote Host。
+
+远程项目链路仍依赖单独部署的非 root Linux x86_64 DSH、`dsh-session-control` 正式 Unix socket、SSH stdio bridge 和独立的 Model Gateway。当前控制端 manifest 只声明 DSH 至 `0.1.5-rc.2`，默认远端锁定版也是 `0.1.5-rc.2`；同工程的 `dsh-session-control 0.8.3` 只声明支持 `0.2.0-rc.1`。因此本次不扩大兼容范围、不改桌面 profile 或凭据、不以无认证的回环 HTTP 请求冒充 rc.2 API 验证。后续若要从 Desktop 控制远端项目，需先分别验证控制端插件在 rc.2 的 Host/工具 API、取得与 rc.2 匹配的正式 session-control 版本，并在隔离环境验证远端 Web Host 的认证和项目操作；这不要求把 Desktop 自身部署为远端服务。
+
+依据：[rc.2 Desktop 架构](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/apps/desktop/README.md)、[rc.2 Connection 与认证](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/client/connection/README.md)、[rc.2 Session Controller](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.0-rc.2/packages/api/session-controller/README.md)。
+
 本机依赖 Node.js 22 或更高版本；`dsh-session-control` 的正式 socket bridge 依赖 Node.js 24。Remote Host 正式目标是 Linux x86_64。冷启动部署要求远端已有 Node.js 24、npm、Corepack、tar、systemd user service，并为该非 root 用户启用 linger；不要求预装 DSH、pnpm、本仓库或项目插件，也不要求 root。`DshHostBootstrapper` 会自动安装并探测 DSH，再通过 loopback SSH local tunnel 创建固定 controller Session、激活正式 `dsh-session-control` profile；完成后 Remote Host 才能启动：
 
 本包接受 `dsh-session-control >=0.8.0 <0.9.0` 的兼容版本，覆盖面向 DSH `0.1.5-rc.2` 的 `0.8.x`，不再把 peer 精确锁死到旧 minor；真正要部署到远端的版本与 SHA-256 仍由运行时读取当前受信安装包后生成 Desired State，不会因此放宽 artifact allowlist。

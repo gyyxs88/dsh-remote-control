@@ -1,5 +1,7 @@
 # DSH Remote Project 控制端 Skill 验收
 
+> 历史验收记录：以下记录描述当时版本的会话名单准入和实机结果，不代表 0.3.3 的当前授权规则。0.3.3 已改为有效运行会话的实时官方 Full Access 准入，详见 README；历史证据保留原样。
+
 范围：控制端 DSH 插件、Host 注册表、首次 Host Key 确认、受信本机 artifact 生成、自动部署编排、远程项目/Schedule 工具和 bundled Skill。
 
 ## 已验证

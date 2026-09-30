@@ -20,12 +20,12 @@ test('DSH recipe requires an exact top-level closure for every non-optional peer
   assert.throws(() => validateDshRecipeLock(missing, packageLock, '0.1.5-rc.2'), (error) => error.code === 'CONTROL_DSH_RECIPE_INVALID' || error.code === 'CONTROL_DSH_RECIPE_PEER_CLOSURE_INVALID');
 });
 
-test('desktop session-control 0.8.4 cannot be prepared for the old remote DSH before any pack or SSH work', async () => {
+test('desktop rc.2 session-control cannot be prepared for the old remote DSH before any pack or SSH work', async () => {
   const sessionControlPackageRoot = path.resolve('..', 'dsh-session-control');
   const packageJson = JSON.parse(await readFile(path.join(sessionControlPackageRoot, 'package.json'), 'utf8'));
-  assert.equal(packageJson.version, '0.8.4');
+  assert.match(packageJson.version, /^0\.8\.\d+$/u);
   assert.deepEqual(packageJson.dsh.remote.dshCompatibility, { min: '0.2.0-rc.2', max: '0.2.0-rc.2' });
-  assert.equal(validateSessionControlRemotePackage(packageJson, '0.2.0-rc.2', '1.0').version, '0.8.4');
+  assert.equal(validateSessionControlRemotePackage(packageJson, '0.2.0-rc.2', '1.0').version, packageJson.version);
   assert.throws(() => validateSessionControlRemotePackage(packageJson, '0.1.5-rc.2', '1.0'), (error) => error.code === 'CONTROL_SESSION_CONTROL_INCOMPATIBLE');
   let spawned = false;
   const cacheDir = path.resolve('temp', `unused-incompatible-artifacts-${randomUUID()}`);

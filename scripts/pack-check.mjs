@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { pathToFileURL } from 'node:url';
@@ -17,12 +17,14 @@ function runNpm(args) {
 }
 const root = await mkdtemp(join(tmpdir(), 'dsh-remote-pack-'));
 try {
-  const pack = runNpm(['pack', '--pack-destination', root]);
-  if (pack.status !== 0) throw new Error(`npm pack failed: ${pack.stderr ?? pack.error?.message ?? 'unknown error'}`);
-  const tgz = (await readdir(root)).find((name) => name.endsWith('.tgz'));
+  if (!process.env.REMOTE_PACK_TARBALL) {
+    const pack = runNpm(['pack', '--ignore-scripts', '--pack-destination', root]);
+    if (pack.status !== 0) throw new Error(`npm pack failed: ${pack.stderr ?? pack.error?.message ?? 'unknown error'}`);
+  }
+  const tgz = process.env.REMOTE_PACK_TARBALL ?? join(root, (await readdir(root)).find((name) => name.endsWith('.tgz')) ?? '');
   if (!tgz) throw new Error('npm pack produced no tgz');
   const consumer = join(root, 'consumer');
-  const install = runNpm(['install', '--ignore-scripts', '--legacy-peer-deps', '--no-audit', '--no-fund', '--offline', '--prefix', consumer, join(root, tgz)]);
+  const install = runNpm(['install', '--ignore-scripts', '--legacy-peer-deps', '--no-audit', '--no-fund', '--offline', '--prefix', consumer, tgz]);
   if (install.status !== 0) throw new Error(`packed tgz install failed: ${install.stderr ?? install.error?.message ?? 'unknown error'}`);
   const packageRoot = join(consumer, 'node_modules', 'dsh-remote-control');
   const packageEntry = pathToFileURL(join(packageRoot, 'lib', 'index.mjs')).href;
@@ -35,9 +37,18 @@ try {
   const pluginCheck = spawnSync(process.execPath, ['--check', join(packageRoot, 'lib', 'dsh-plugin.mjs')], { encoding: 'utf8', stdio: 'pipe' });
   if (pluginCheck.status !== 0) throw new Error(`packed DSH plugin smoke failed: ${pluginCheck.stderr}`);
   const packedPackage = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8'));
+  if (packedPackage.version !== packedPackage.dsh.control.version) throw new Error('packed control version mismatch');
   const skillPath = join(packageRoot, 'skills', 'dsh-remote-project', 'SKILL.md');
   const skillDigest = createHash('sha256').update(await readFile(skillPath)).digest('hex');
   if (packedPackage.dsh?.control?.bundledSkills?.[0]?.sha256 !== skillDigest || packedPackage.dsh?.bundle?.patch !== './cordis.patch.yml') throw new Error('packed DSH plugin/Skill manifest is invalid');
+  if (process.env.REMOTE_TEST_TMP) {
+    const integration = spawnSync(process.execPath, ['--import', pathToFileURL(join(process.cwd(), 'scripts/official-test-runtime.mjs')).href,
+      '--test', '--experimental-test-isolation=none', 'test/dsh-plugin.test.mjs'], {
+      cwd: process.cwd(), env: { ...process.env, REMOTE_TEST_PLUGIN_ENTRY: pathToFileURL(join(packageRoot, 'lib/dsh-plugin.mjs')).href }, encoding: 'utf8', windowsHide: true,
+    });
+    process.stdout.write(integration.stdout ?? '');
+    if (integration.status !== 0) throw new Error(`packed plugin integration failed: ${integration.stderr}`);
+  }
   const gateway = gatewayProcess = spawn(process.execPath, [join(packageRoot, 'bin', 'dsh-model-gateway.mjs'), '--port', '0'], { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
   let gatewayOutput = '';
   gateway.stderr.setEncoding('utf8');
@@ -57,7 +68,7 @@ try {
   gateway.kill();
   await once(gateway, 'exit');
   gatewayProcess = null;
-  console.log(JSON.stringify({ status: 'passed', tarball: tgz, imported: true, binsChecked: 5, pluginChecked: true, skillDigest }));
+  console.log(JSON.stringify({ status: 'passed', tarball: basename(tgz), sha256: createHash('sha256').update(await readFile(tgz)).digest('hex'), imported: true, binsChecked: 5, pluginChecked: true, skillDigest }));
 } finally {
   if (gatewayProcess && !gatewayProcess.killed) gatewayProcess.kill();
   await rm(root, { recursive: true, force: true });

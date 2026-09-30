@@ -57,16 +57,13 @@ DSH 远程项目控制插件：内置控制端 `dsh-remote-project` Skill 和 `r
 
 ### DSH 控制端插件与 Skill
 
-包内 `cordis.patch.yml` 通过 `dsh-remote-control/plugin` 加载控制端插件。受管部署可把 `controllerSessionIds` 配成与 `dsh-session-control` 相同的显式控制会话；个人 DSH 可启用 `authorizeAllOrdinarySessions`。两者都未配置时不会向任何 Session 挂载工具：
+从 0.3.3 起，包内 `cordis.patch.yml` 通过 `dsh-remote-control/plugin` 加载控制端插件。任何官方 DSH 当前具有 `danger-full-access` 的有效运行会话都可使用完整远程管理工具，无需配置会话名单；非 Full Access 会话不挂载工具，所有读写工具的执行都拒绝。准入实时调用 `permissionPresets.current(agent.session)`，并核对 `ctx.agents.get(agent.id) === agent`；缺少有效 ID、Session、官方服务或权限读取异常时 fail closed。
 
 ```yaml
 - insert:
     - id: dsh-remote-control
       name: dsh-remote-control/plugin
       config:
-        controllerSessionIds:
-          - session-your-controller
-        authorizeAllOrdinarySessions: false
         stateDir: .dsh-remote-control
         # Desktop 控制旧远端时，显式指定与远端锁定版一致的受信 Web lock recipe。
         dshRecipeRoot: D:/path/to/remote-web-recipe
@@ -74,7 +71,9 @@ DSH 远程项目控制插件：内置控制端 `dsh-remote-project` Skill 和 `r
         sessionControlPackageRoot: D:/path/to/remote-compatible-session-control
 ```
 
-`authorizeAllOrdinarySessions: true` 只扩展到普通用户会话：subagent 不会获得远程工具，来自 `dsh-session-control` 的 relay 轮即使运行在已授权会话中也会被执行时门禁拒绝。修改主机、远程项目或定时任务仍按当前会话的原生权限预设执行 Workspace Write 审批或 Full Access 自主授权。
+`controllerSessionIds` 和 `authorizeAllOrdinarySessions` 已从 Config 删除；旧配置字段即使保留也会被忽略，不能授权或限制会话。准入不另设 ordinary/root/child 名单，subagent 同样按自身实时官方权限判断。监听 preset、sandbox、approval 会话事件及 `permission-presets/catalog-changed`，权限降级卸载，完全访问重授后重新挂载；旧工具引用保持撤销，执行前再次核对有效身份和当前权限。子会话不会继承父会话的管理权限。来自 `dsh-session-control` 的 relay 轮仍拒绝，正常调用继续经过官方 `tools/pre-execute` 审批链路。
+
+Desktop 交付版本为 `0.3.3`。官方 Web DSH `0.2.0-rc.1` 使用独立衍生包 `0.3.3-compat020rc1.1`：与 Desktop 共享同一实现，仅调整 package/control 版本、rc.1 tools/Schemastery peer 和控制端兼容范围，不升级官方 DSH，也不改动旧远端 `0.1.5-rc.2` recipe。测试使用同一版本树内的官方 Cordis/scope/tools，避免混用 SDK 身份。
 
 插件注册 `remote_host_list/probe/add/update/remove/inspect`、`remote_project_open/reconcile` 和 `remote_schedule_create/delete`。bundled Skill 位于 `skills/dsh-remote-project/SKILL.md`，会自动注册为模型和用户均可调用的 Skill。用户以后可以直接说：
 
@@ -82,7 +81,7 @@ DSH 远程项目控制插件：内置控制端 `dsh-remote-project` Skill 和 `r
 
 Skill 会先查本机 owner-only 主机注册表。首次未知主机只探测公开 Host Key 指纹，必须由用户通过可信渠道核对精确指纹后才登记；不会自动接受未知 key。第一次打开项目时，控制器从当前已安装且受信的本包、`dsh-session-control` 和精确 DSH lock recipe 生成无 lifecycle 的固定 `.tgz`，计算摘要并完成非 root 部署。项目不能提交下载 URL、Shell 安装脚本或自证摘要。
 
-`remote_host_remove` 只删除本机登记和连接，不卸载远端组件、不删除目录、Workspace 或 Session。主控制会话为 `danger-full-access` 时可以自主执行；`workspace-write` 的变更操作仍由当前控制会话人工审批，relay 轮次一律不能使用远程工具。
+`remote_host_remove` 只删除本机登记和连接，不卸载远端组件、不删除目录、Workspace 或 Session。来源会话必须当前具有官方 `danger-full-access`；`workspace-write` 和其他权限均不能调用管理工具，relay 轮次一律不能使用远程工具。远端目标会话的权限与审批仍按项目请求独立处理。
 
 ```bash
 npm install

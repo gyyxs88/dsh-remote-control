@@ -7,7 +7,7 @@ description: 用自然语言登记 SSH 主机、自动部署远端 DSH，并在�
 
 使用 `remote_*` 工具完成远程主机和项目操作。不要让用户输入内部 Host id、Workspace id、Session id、operation id 或部署参数；先自行发现并维护这些标识。不要用 Shell 临时拼接 SSH、SCP、安装或数据库命令绕过插件。
 
-工具可见性由部署授权决定。推荐个人 DSH 启用 `authorizeAllOrdinarySessions`，让每个普通用户会话都能直接使用本 Skill；subagent 和 `dsh-session-control` 中继轮仍不能调用远程控制工具。受管或多用户部署可继续使用显式 `controllerSessionIds`。
+工具仅向当前官方权限为 `danger-full-access` 的有效运行会话挂载。无需会话名单，旧 `controllerSessionIds` / `authorizeAllOrdinarySessions` 字段不会授权；普通会话和 subagent 均实时检查自身官方权限，不能继承父会话的管理权限。权限降级卸载工具并拒绝旧引用，完全访问重授后重新挂载；缺少有效身份、Session、官方权限服务或读取异常时拒绝。`dsh-session-control` 中继轮仍不能调用远程控制工具，正常调用保留官方 pre-execute 审批和主机/SSH 约束。
 
 ## 定位主机
 

@@ -31,10 +31,11 @@ if (suite === 'pack') {
   fs.mkdirSync(stage);
   for (const file of meta.files) fs.cpSync(path.join(repo, file), path.join(stage, file), { recursive: true });
   if (sdk === 'rc1') {
-    meta.version = '0.3.3-compat020rc1.1';
+    meta.version = '0.3.3-compat020rc1.2';
     meta.dsh.control.version = meta.version;
     meta.peerDependencies['@deepseek-ai/dsh-tools'] = '0.2.0-rc.1';
     meta.peerDependencies['@deepseek-ai/schemastery'] = '~3.18.4';
+    meta.peerDependencies['dsh-session-control'] = '>=0.8.0 <0.9.0 || 0.8.5-compat020rc1.1';
     meta.dsh.control.dshCompatibility = { min: '0.2.0-rc.1', max: '0.2.0-rc.1' };
   }
   fs.writeFileSync(path.join(stage, 'package.json'), JSON.stringify(meta, null, 2) + '\n');
